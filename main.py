@@ -70,9 +70,13 @@ TP: {signal['tp']:.5f}
             time.sleep(30)
 
 if __name__ == "__main__":
+    # Send a test message immediately
+    from telegram_bot import send_alert
+    send_alert("✅ S01 Engine is LIVE and Telegram is working!")
+
     # Start strategy in background
     t = threading.Thread(target=run_strategy_loop, daemon=True)
     t.start()
     
-    # Start health server (needed for Render free keep-alive)
+    # Start health server
     app.run(host="0.0.0.0", port=10000)
