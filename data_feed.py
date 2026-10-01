@@ -1,28 +1,46 @@
 import requests
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
-# Free data source - no key required
-BASE_URL = "https://biquote.io/api"
+def get_m5_candles(symbol: str, limit: int = 150):
+    """
+    Free data using Twelve Data demo + fallback.
+    symbol examples: GBP/USD , USD/JPY
+    """
+    # Convert our symbol format
+    if symbol == "GBPUSD":
+        td_symbol = "GBP/USD"
+    elif symbol == "USDJPY":
+        td_symbol = "USD/JPY"
+    else:
+        td_symbol = symbol
 
-def get_ohlc(symbol: str, interval: str = "5", limit: int = 300):
-    """
-    symbol examples: EURUSD, GBPUSD, USDJPY, XAUUSD
-    interval: 5 = M5, 15 = M15, 60 = H1
-    """
     try:
-        url = f"{BASE_URL}/{symbol}"
-        # Note: biquote live quotes + simple candles
-        # For production we will expand this
-        r = requests.get(url, timeout=10)
+        # Twelve Data free demo endpoint (limited but works for testing)
+        url = (
+            f"https://api.twelvedata.com/time_series"
+            f"?symbol={td_symbol}"
+            f"&interval=5min"
+            f"&outputsize={limit}"
+            f"&apikey=demo"
+        )
+        r = requests.get(url, timeout=12)
         data = r.json()
-        return data
-    except Exception as e:
-        print("Data error:", e)
-        return None
 
-def get_m5_candles(symbol: str, limit: int = 200):
-    """Simple placeholder - we will improve later"""
-    # For now we use a free source that can give us recent data
-    # In next version we will use proper historical endpoint
-    return None
+        if "values" not in data:
+            print("Data error for", symbol, ":", data.get("message", data))
+            return None
+
+        values = data["values"][::-1]  # oldest → newest
+
+        return {
+            "open":  [float(x["open"])  for x in values],
+            "high":  [float(x["high"])  for x in values],
+            "low":   [float(x["low"])   for x in values],
+            "close": [float(x["close"]) for x in values],
+            "time":  [x["datetime"]     for x in values]
+        }
+
+    except Exception as e:
+        print("get_m5_candles error:", e)
+        return None
