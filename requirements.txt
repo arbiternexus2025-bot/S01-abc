@@ -1,5 +1,6 @@
+
 requests
 python-dotenv
 flask
-pandas
 numpy
+pandas
