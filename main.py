@@ -26,19 +26,28 @@ Take Profit: <code>{s['tp']}</code>
 """.strip()
 
 def run_loop():
-    print(f"=== FULL TOP-15 ENGINE STARTED ({len(MODES)} modes) ===")
+    print("=== FULL TOP-15 ENGINE (biquote) ===")
+    print(f"Monitoring {len(MODES)} modes")
+    print("Data source: biquote.io (no API key)")
+    print("Scan interval: every 3 minutes")
     last_alert = {}
+
     while True:
         try:
+            print("Scanning all modes...")
             signals = check_all_modes(get_ohlc)
             now = time.time()
+
             for s in signals:
                 key = s["mode"]
-                if now - last_alert.get(key, 0) > 3600:  # 1 hour cooldown per mode
+                if now - last_alert.get(key, 0) > 2700:  # 45 min cooldown
                     if send_alert(format_signal(s)):
                         last_alert[key] = now
-                        print(f"ALERT → {s['mode']} {s['direction']}")
-            time.sleep(120)  # full scan every 2 minutes
+                        print(f"ALERT SENT → {s['mode']} {s['direction']}")
+
+            print("Scan complete. Sleeping 3 minutes...")
+            time.sleep(180)
+
         except Exception as e:
             print("Loop error:", e)
             time.sleep(30)
