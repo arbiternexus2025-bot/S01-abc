@@ -1,6 +1,7 @@
 from flask import Flask
 import time
 import threading
+import sys
 from telegram_bot import send_alert
 from data_feed import get_ohlc
 from strategy_runner import check_all_modes, MODES
@@ -26,30 +27,34 @@ Take Profit: <code>{s['tp']}</code>
 """.strip()
 
 def run_loop():
-    print("=== FULL TOP-15 ENGINE (biquote) ===")
-    print(f"Monitoring {len(MODES)} modes")
-    print("Data source: biquote.io (no API key)")
-    print("Scan interval: every 3 minutes")
+    print("=== FULL TOP-15 ENGINE (biquote) ===", flush=True)
+    print(f"Monitoring {len(MODES)} modes", flush=True)
+    print("Data source: biquote.io (no API key)", flush=True)
+    print("Scan interval: every 3 minutes", flush=True)
     last_alert = {}
 
     while True:
         try:
-            print("Scanning all modes...")
-            signals = check_all_modes(get_ohlc)
-            now = time.time()
+            print("Scanning all modes...", flush=True)
+            sys.stdout.flush()
 
+            signals = check_all_modes(get_ohlc)
+
+            print(f"Scan finished. Found {len(signals)} signals.", flush=True)
+
+            now = time.time()
             for s in signals:
                 key = s["mode"]
-                if now - last_alert.get(key, 0) > 2700:  # 45 min cooldown
+                if now - last_alert.get(key, 0) > 2700:
                     if send_alert(format_signal(s)):
                         last_alert[key] = now
-                        print(f"ALERT SENT → {s['mode']} {s['direction']}")
+                        print(f"ALERT SENT → {s['mode']} {s['direction']}", flush=True)
 
-            print("Scan complete. Sleeping 3 minutes...")
+            print("Sleeping 3 minutes...", flush=True)
             time.sleep(180)
 
         except Exception as e:
-            print("Loop error:", e)
+            print("Loop error:", str(e), flush=True)
             time.sleep(30)
 
 if __name__ == "__main__":
