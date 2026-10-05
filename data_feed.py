@@ -1,7 +1,6 @@
 import requests
 import numpy as np
 
-# Map our internal names → biquote symbols
 SYMBOL_MAP = {
     "XAUUSD": "XAUUSD",
     "GBPUSD": "GBPUSD",
@@ -30,18 +29,15 @@ def get_ohlc(market: str, tf: str, limit: int = 250):
         data = r.json()
 
         if "bars" not in data:
-            print(f"Data error {market} {tf}:", data)
+            print(f"[DATA] Error {market} {tf}: {data}", flush=True)
             return None
 
         bars = data["bars"]
-
-        # bars arrive newest-first → reverse to oldest-first
-        # skip the currently open bar if present
         closed = [b for b in bars if not b.get("isOpen", False)]
-        closed = closed[::-1]  # now oldest → newest
+        closed = closed[::-1]  # oldest → newest
 
         if len(closed) < 50:
-            print(f"Not enough closed bars for {market} {tf}")
+            print(f"[DATA] Not enough bars for {market} {tf} ({len(closed)})", flush=True)
             return None
 
         return {
@@ -51,5 +47,5 @@ def get_ohlc(market: str, tf: str, limit: int = 250):
             "close": np.array([float(b["close"]) for b in closed]),
         }
     except Exception as e:
-        print(f"get_ohlc error {market} {tf}:", e)
+        print(f"[DATA] Exception {market} {tf}: {e}", flush=True)
         return None
