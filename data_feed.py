@@ -18,9 +18,9 @@ INTERVAL_MAP = {
     "H4": "4h"
 }
 
-def get_ohlc(market: str, tf: str, limit: int = 250):
+def get_ohlc(market: str, tf: str, limit: int = 300):
     symbol = SYMBOL_MAP.get(market, market)
-    interval = INTERVAL_MAP.get(tf, "5m")
+    interval = INTERVAL_MAP.get(tf, "30m")
 
     try:
         url = f"https://biquote.io/api/{symbol}/ohlc"
@@ -36,7 +36,7 @@ def get_ohlc(market: str, tf: str, limit: int = 250):
         closed = [b for b in bars if not b.get("isOpen", False)]
         closed = closed[::-1]  # oldest → newest
 
-        if len(closed) < 50:
+        if len(closed) < 80:
             print(f"[DATA] Not enough bars for {market} {tf} ({len(closed)})", flush=True)
             return None
 
