@@ -26,50 +26,46 @@ Take Profit: <code>{s['tp']}</code>
 """.strip()
 
 def run_loop():
-    print("=== FULL TOP-15 ENGINE (Prioritised) ===", flush=True)
-    print("M5 modes  → every 3 minutes", flush=True)
-    print("M30/H4    → every 9 minutes", flush=True)
-    print("-" * 50, flush=True)
+    print("=== NEW TOP-15 ENGINE (S09 Wick Dominant) ===", flush=True)
+    print("M30 modes → every 4 minutes", flush=True)
+    print("H4 modes  → every 9 minutes", flush=True)
+    print("-" * 55, flush=True)
 
-    m5_modes = [m for m in MODES if m["group"] == "M5"]
-    htf_modes = [m for m in MODES if m["group"] == "HTF"]
+    m30_modes = [m for m in MODES if m["group"] == "M30"]
+    h4_modes  = [m for m in MODES if m["group"] == "H4"]
 
-    last_alert = {}          # key = "MODE|DIRECTION|ENTRY"
-    last_m5_scan = 0
-    last_htf_scan = 0
+    last_alert = {}
+    last_m30 = 0
+    last_h4  = 0
 
     while True:
         try:
             now = time.time()
             signals = []
 
-            # ----- M5 group (every 3 min) -----
-            if now - last_m5_scan >= 180:
-                print("\n[M5] Scanning S-tier modes...", flush=True)
-                signals += check_modes(m5_modes, get_ohlc)
-                last_m5_scan = now
+            if now - last_m30 >= 240:          # 4 min
+                print("\n[M30] Scanning...", flush=True)
+                signals += check_modes(m30_modes, get_ohlc)
+                last_m30 = now
 
-            # ----- HTF group (every 9 min) -----
-            if now - last_htf_scan >= 540:
-                print("\n[HTF] Scanning M30/H4 modes...", flush=True)
-                signals += check_modes(htf_modes, get_ohlc)
-                last_htf_scan = now
+            if now - last_h4 >= 540:           # 9 min
+                print("\n[H4] Scanning...", flush=True)
+                signals += check_modes(h4_modes, get_ohlc)
+                last_h4 = now
 
-            # ----- Process signals -----
             if signals:
-                print(f"Found {len(signals)} signal(s) this cycle.", flush=True)
+                print(f"Found {len(signals)} signal(s).", flush=True)
                 for s in signals:
                     key = f"{s['mode']}|{s['direction']}|{s['entry']}"
-                    if now - last_alert.get(key, 0) > 7200:  # 2-hour cooldown
+                    if now - last_alert.get(key, 0) > 7200:  # 2 h cooldown
                         if send_alert(format_signal(s)):
                             last_alert[key] = now
                             print(f"ALERT SENT → {s['mode']} {s['direction']} @ {s['entry']}", flush=True)
                     else:
-                        print(f"Skipped duplicate → {s['mode']} {s['direction']} @ {s['entry']}", flush=True)
+                        print(f"Skipped duplicate → {s['mode']}", flush=True)
             else:
                 print("No new signals this cycle.", flush=True)
 
-            # Sleep a short time so we can check the timers often
             time.sleep(30)
 
         except Exception as e:
