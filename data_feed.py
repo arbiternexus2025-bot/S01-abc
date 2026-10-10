@@ -34,10 +34,10 @@ def get_ohlc(market: str, tf: str, limit: int = 300):
 
         bars = data["bars"]
         closed = [b for b in bars if not b.get("isOpen", False)]
-        closed = closed[::-1]  # oldest → newest
+        closed = closed[::-1]
 
         if len(closed) < 80:
-            print(f"[DATA] Not enough bars for {market} {tf} ({len(closed)})", flush=True)
+            print(f"[DATA] Not enough bars {market} {tf}", flush=True)
             return None
 
         return {
