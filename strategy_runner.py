@@ -1,40 +1,87 @@
-import numpy as np
 from datetime import datetime, timezone
-from S01_pattern_detection import compute_atr as s01_atr, detect_abc_signals
-from S04_pattern_detection import compute_atr as s04_atr, detect_ifvg_signals
 from S09_pattern_detection import detect_s09_signals
 
 MODES = [
-    {"id": "S09_StrongWick_050_USDJPY", "family": "S09", "market": "USDJPY", "tf": "M30",
-     "wick": 0.50, "rr": 2.5, "group": "M30"},
-    {"id": "S09_StrongWick_050_USDCHF", "family": "S09", "market": "USDCHF", "tf": "M30",
-     "wick": 0.50, "rr": 2.5, "group": "M30"},
-    {"id": "S09_StrongWick_050_GBPUSD", "family": "S09", "market": "GBPUSD", "tf": "M30",
-     "wick": 0.50, "rr": 2.5, "group": "M30"},
-    {"id": "S09_StrongWick_050_XAUUSD", "family": "S09", "market": "XAUUSD", "tf": "M30",
-     "wick": 0.50, "rr": 2.5, "group": "M30"},
-    {"id": "S09_StrongWick_050_EURUSD", "family": "S09", "market": "EURUSD", "tf": "M30",
-     "wick": 0.50, "rr": 2.5, "group": "M30"},
-    {"id": "S09_Wick_045_XAUUSD", "family": "S09", "market": "XAUUSD", "tf": "M30",
-     "wick": 0.45, "rr": 2.5, "group": "M30"},
-    {"id": "S09_Wick_045_USDJPY", "family": "S09", "market": "USDJPY", "tf": "M30",
-     "wick": 0.45, "rr": 2.5, "group": "M30"},
-    {"id": "S04_IFVG_Strict_USDJPY_H4", "family": "S04", "market": "USDJPY", "tf": "H4",
-     "filter": "Strict", "rr": 2.5, "sl_mult": 1.0, "group": "H4"},
-    {"id": "S01_BRK_USDJPY_M30_p7", "family": "S01", "market": "USDJPY", "tf": "M30",
-     "pivot": 7, "min_imp": 1.0, "max_retr": 0.95, "tp_mult": 1.60, "group": "M30"},
-    {"id": "S04_IFVG_Bal_EURUSD_M30", "family": "S04", "market": "EURUSD", "tf": "M30",
-     "filter": "Balanced", "rr": 2.5, "sl_mult": 1.0, "group": "M30"},
+    # USDJPY
+    {"id": "S09_SW050_Active_USDJPY", "market": "USDJPY", "tf": "M30",
+     "wick": 0.50, "rr": 2.5, "session": "Active", "priority": 110},
+    {"id": "S09_SW050_NY_USDJPY", "market": "USDJPY", "tf": "M30",
+     "wick": 0.50, "rr": 2.5, "session": "NY", "priority": 100},
+    {"id": "S09_W045_Active_USDJPY", "market": "USDJPY", "tf": "M30",
+     "wick": 0.45, "rr": 2.5, "session": "Active", "priority": 95},
+    {"id": "S09_W040_NY_USDJPY", "market": "USDJPY", "tf": "M30",
+     "wick": 0.40, "rr": 2.5, "session": "NY", "priority": 90},
+
+    # GBPUSD
+    {"id": "S09_SW050_NY_GBPUSD", "market": "GBPUSD", "tf": "M30",
+     "wick": 0.50, "rr": 2.5, "session": "NY", "priority": 105},
+    {"id": "S09_W045_NY_GBPUSD", "market": "GBPUSD", "tf": "M30",
+     "wick": 0.45, "rr": 2.5, "session": "NY", "priority": 85},
+
+    # USDCHF
+    {"id": "S09_SW050_Active_USDCHF", "market": "USDCHF", "tf": "M30",
+     "wick": 0.50, "rr": 2.5, "session": "Active", "priority": 100},
+    {"id": "S09_SW050_London_USDCHF", "market": "USDCHF", "tf": "M30",
+     "wick": 0.50, "rr": 2.5, "session": "London", "priority": 95},
+    {"id": "S09_W045_London_USDCHF", "market": "USDCHF", "tf": "M30",
+     "wick": 0.45, "rr": 2.5, "session": "London", "priority": 80},
+
+    # EURUSD
+    {"id": "S09_SW050_NY_EURUSD", "market": "EURUSD", "tf": "M30",
+     "wick": 0.50, "rr": 2.5, "session": "NY", "priority": 95},
+    {"id": "S09_W045_NY_EURUSD", "market": "EURUSD", "tf": "M30",
+     "wick": 0.45, "rr": 2.5, "session": "NY", "priority": 80},
+
+    # XAUUSD
+    {"id": "S09_W045_London_XAUUSD", "market": "XAUUSD", "tf": "M30",
+     "wick": 0.45, "rr": 2.5, "session": "London", "priority": 90},
+    {"id": "S09_W040_London_XAUUSD", "market": "XAUUSD", "tf": "M30",
+     "wick": 0.40, "rr": 2.5, "session": "London", "priority": 75},
 ]
 
+def in_session(session_name):
+    h = datetime.now(timezone.utc).hour
+    if session_name == "Active":
+        return 7 <= h < 21
+    if session_name == "London":
+        return 7 <= h < 16
+    if session_name == "NY":
+        return 12 <= h < 21
+    return True
+
+def _is_fresh(entry_bar, n):
+    return entry_bar >= n - 2
+
+def _stop_still_valid(sig, ohlc):
+    high, low, close = ohlc["high"], ohlc["low"], ohlc["close"]
+    n = len(close)
+    start = max(0, n - 3)
+
+    if sig["direction"] == "LONG":
+        for i in range(start, n):
+            if low[i] <= sig["sl"]:
+                return False, "stop already hit"
+        if close[-1] <= sig["sl"]:
+            return False, "price past stop"
+    else:
+        for i in range(start, n):
+            if high[i] >= sig["sl"]:
+                return False, "stop already hit"
+        if close[-1] >= sig["sl"]:
+            return False, "price past stop"
+    return True, "ok"
+
 def run_s09(mode, ohlc):
+    if not in_session(mode["session"]):
+        return None
     high, low, open_, close = ohlc["high"], ohlc["low"], ohlc["open"], ohlc["close"]
     signals = detect_s09_signals(high, low, open_, close,
                                  wick_mult=mode["wick"], rr=mode.get("rr", 2.5))
     if not signals:
         return None
     s = signals[-1]
-    if s.entry_bar < len(close) - 4:
+    if not _is_fresh(s.entry_bar, len(close)):
+        print("     Rejected → stale", flush=True)
         return None
     return {
         "direction": "LONG" if s.direction == 1 else "SHORT",
@@ -45,60 +92,8 @@ def run_s09(mode, ohlc):
         "sl": round(float(s.stop), 5),
         "tp": round(float(s.target), 5),
         "family": "S09",
-        "risk": abs(float(s.entry_price) - float(s.stop))
-    }
-
-def run_s04(mode, ohlc):
-    high, low = ohlc["high"], ohlc["low"]
-    open_ = ohlc.get("open", ohlc["close"])
-    close = ohlc["close"]
-    atr = s04_atr(high, low, close)
-    signals = detect_ifvg_signals(high, low, open_, close, atr,
-                                  filter_mode=mode["filter"],
-                                  sl_atr_mult=mode["sl_mult"],
-                                  tp_rr=mode["rr"],
-                                  entry_mode="Broken Boundary")
-    if not signals:
-        return None
-    s = signals[-1]
-    if s.entry_bar < len(close) - 4:
-        return None
-    return {
-        "direction": "LONG" if s.direction == 1 else "SHORT",
-        "mode": mode["id"],
-        "market": mode["market"],
-        "tf": mode["tf"],
-        "entry": round(float(s.entry_price), 5),
-        "sl": round(float(s.stop), 5),
-        "tp": round(float(s.target), 5),
-        "family": "S04",
-        "risk": abs(float(s.entry_price) - float(s.stop))
-    }
-
-def run_s01(mode, ohlc):
-    high, low, close = ohlc["high"], ohlc["low"], ohlc["close"]
-    atr = s01_atr(high, low, close)
-    signals = detect_abc_signals(high, low, close, atr,
-                                 pivot_left=mode["pivot"], pivot_right=mode["pivot"],
-                                 min_impulse_atr=mode["min_imp"],
-                                 max_retrace=mode["max_retr"],
-                                 tp_ab_mult=mode["tp_mult"],
-                                 sl_atr_buffer=0.25,
-                                 require_bc_break=True)
-    if not signals:
-        return None
-    s = signals[-1]
-    if s.entry_bar < len(close) - 4:
-        return None
-    return {
-        "direction": "LONG" if s.direction == 1 else "SHORT",
-        "mode": mode["id"],
-        "market": mode["market"],
-        "tf": mode["tf"],
-        "entry": round(float(s.entry_price), 5),
-        "sl": round(float(s.stop), 5),
-        "tp": round(float(s.target), 5),
-        "family": "S01",
+        "priority": mode["priority"],
+        "premium": True,
         "risk": abs(float(s.entry_price) - float(s.stop))
     }
 
@@ -113,19 +108,27 @@ def check_modes(modes_to_check, get_ohlc_func):
         try:
             if "open" not in ohlc:
                 ohlc["open"] = ohlc["close"]
-            if mode["family"] == "S09":
-                sig = run_s09(mode, ohlc)
-            elif mode["family"] == "S04":
-                sig = run_s04(mode, ohlc)
-            elif mode["family"] == "S01":
-                sig = run_s01(mode, ohlc)
-            else:
-                sig = None
-            if sig:
-                print(f"     SIGNAL {sig['direction']} @ {sig['entry']}", flush=True)
-                results.append(sig)
-            else:
-                print("     No signal", flush=True)
+            sig = run_s09(mode, ohlc)
+            if sig is None:
+                continue
+            ok, reason = _stop_still_valid(sig, ohlc)
+            if not ok:
+                print(f"     Rejected → {reason}", flush=True)
+                continue
+            print(f"     SIGNAL {sig['direction']} @ {sig['entry']}", flush=True)
+            results.append(sig)
         except Exception as e:
             print(f"     Error: {e}", flush=True)
     return results
+
+def select_highest_modes(signals):
+    if not signals:
+        return []
+    groups = {}
+    for s in signals:
+        key = f"{s['market']}|{s['direction']}|{round(s['entry'], 5)}"
+        if key not in groups or s["priority"] > groups[key]["priority"]:
+            groups[key] = s
+    selected = list(groups.values())
+    print(f"  → Highest-mode kept {len(selected)}", flush=True)
+    return selected
