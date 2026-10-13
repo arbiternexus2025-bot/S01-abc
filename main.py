@@ -4,9 +4,9 @@ import threading
 from datetime import datetime, timezone
 from telegram_bot import send_alert
 from data_feed import get_ohlc
-from strategy_runner import MODES, check_modes
+from strategy_runner import MODES, check_modes, select_highest_modes
 from trade_manager import (
-    add_open_trade, check_open_trades, compute_stats, load_open
+    add_open_trade, check_open_trades, load_open, closed_today_stats
 )
 
 app = Flask(__name__)
@@ -15,10 +15,10 @@ app = Flask(__name__)
 def health():
     return "OK", 200
 
-def format_new_signal(s):
+def format_signal(s):
     emoji = "🟢 LONG" if s["direction"] == "LONG" else "🔴 SHORT"
     return f"""
-🚨 <b>{s['family']} NEW SIGNAL</b>
+🚨 <b>S09 PREMIUM SIGNAL</b> ⭐
 
 Mode: <b>{s['mode']}</b>
 Market: <b>{s['market']} {s['tf']}</b>
@@ -48,96 +48,81 @@ Result: <b>{t['r_multiple']:+.2f}R</b>
 Duration: {t['duration_hours']}h
 """.strip()
 
-def format_report(st):
-    if not st:
-        return None
-    lines = [
-        f"📊 <b>{st['title']} REPORT</b>",
-        "",
-        f"Trades: {st['n']}",
-        f"Wins / Losses: {st['wins']} / {st['losses']}",
-        f"Win Rate: {st['wr']}%",
-        f"Avg R: {st['avg_r']}",
-        f"Profit Factor: {st['pf']}",
-        f"Net: <b>{st['net_r']:+.2f}R</b>",
-        f"Max DD: {st['max_dd']}R",
-    ]
-    if st.get("market_lines"):
-        lines.append("")
-        lines.append("<b>By Market</b>")
-        lines.extend(st["market_lines"])
+def format_daily(alert_stats, trade_stats):
+    lines = ["📊 <b>DAILY SUMMARY</b>", ""]
+    lines.append(f"Alerts sent: {alert_stats.get('total', 0)}")
+    if alert_stats.get("by_market"):
+        for m, c in sorted(alert_stats["by_market"].items()):
+            lines.append(f"  {m}: {c}")
+
+    lines.append("")
+    if trade_stats:
+        lines.append("<b>Closed trades (24h)</b>")
+        lines.append(f"Trades: {trade_stats['n']}")
+        lines.append(f"Wins / Losses: {trade_stats['wins']} / {trade_stats['losses']}")
+        lines.append(f"Win Rate: {trade_stats['wr']}%")
+        lines.append(f"Net: <b>{trade_stats['net_r']:+.2f}R</b>")
+    else:
+        lines.append("No trades closed in last 24h")
+
+    open_n = len(load_open())
+    lines.append("")
+    lines.append(f"Currently open: {open_n}")
     return "\n".join(lines)
 
 def run_loop():
-    print("=== ENGINE v2.1 — Daily + Friday Weekly Reports ===", flush=True)
+    print("=== PREMIUM + SAFE TRADE TRACKER ===", flush=True)
     print(f"Modes: {len(MODES)}", flush=True)
+    print("Min age before check: 35 min | Max life: 72h", flush=True)
+    print("-" * 55, flush=True)
 
     last_alert = {}
-    last_m30 = 0
-    last_h4 = 0
+    last_scan = 0
     last_daily_date = None
-    last_weekly_date = None
-
-    m30_modes = [m for m in MODES if m["group"] == "M30"]
-    h4_modes  = [m for m in MODES if m["group"] == "H4"]
+    daily_alerts = {"total": 0, "by_market": {}}
 
     while True:
         try:
             now = time.time()
             utc = datetime.now(timezone.utc)
             today = utc.date()
-            weekday = utc.weekday()   # 0=Mon ... 4=Fri
             hour = utc.hour
 
-            # ----- Manage open trades -----
+            # ----- 1. Check open trades (safe) -----
             closed = check_open_trades()
             for t in closed:
                 send_alert(format_closed(t))
-                print(f"CLOSED {t['status']} {t['mode']} → {t['r_multiple']:+.2f}R", flush=True)
 
-            # ----- Signal scans -----
-            signals = []
-            if now - last_m30 >= 240:
-                print("\n[M30] Scanning...", flush=True)
-                signals += check_modes(m30_modes, get_ohlc)
-                last_m30 = now
+            # ----- 2. Scan for new signals -----
+            if now - last_scan >= 240:
+                print("\n[PREMIUM] Scanning...", flush=True)
+                signals = check_modes(MODES, get_ohlc)
+                signals = select_highest_modes(signals)
+                last_scan = now
 
-            if now - last_h4 >= 540:
-                print("\n[H4] Scanning...", flush=True)
-                signals += check_modes(h4_modes, get_ohlc)
-                last_h4 = now
+                for s in signals:
+                    key = f"{s['market']}|{s['direction']}|{s['entry']}"
+                    if now - last_alert.get(key, 0) > 7200:
+                        if send_alert(format_signal(s)):
+                            last_alert[key] = now
+                            print(f"ALERT SENT → {s['mode']} {s['direction']}", flush=True)
+                            # Log as OPEN only after successful alert
+                            add_open_trade(s)
+                            daily_alerts["total"] += 1
+                            daily_alerts["by_market"][s["market"]] = \
+                                daily_alerts["by_market"].get(s["market"], 0) + 1
+                    else:
+                        print(f"Skipped (cooldown) → {s['mode']}", flush=True)
 
-            for s in signals:
-                key = f"{s['market']}|{s['direction']}|{round(s['entry'], 5)}"
-                if now - last_alert.get(key, 0) < 7200:
-                    print(f"  Skipped duplicate {s['market']} {s['direction']}", flush=True)
-                    continue
-                if add_open_trade(s):
-                    if send_alert(format_new_signal(s)):
-                        last_alert[key] = now
-                        print(f"ALERT + OPENED → {s['mode']}", flush=True)
-                else:
-                    print(f"  Already open → {s['market']}", flush=True)
-
-            # ----- DAILY REPORT (once per day after 21:00 UTC) -----
+            # ----- 3. Daily summary -----
             if hour >= 21 and last_daily_date != today:
-                st, _ = compute_stats("daily")
-                msg = format_report(st)
-                if msg:
-                    send_alert(msg)
-                    print("Daily report sent", flush=True)
+                trade_stats = closed_today_stats()
+                send_alert(format_daily(daily_alerts, trade_stats))
+                print("Daily summary sent", flush=True)
+                daily_alerts = {"total": 0, "by_market": {}}
                 last_daily_date = today
 
-            # ----- WEEKLY REPORT (Friday after 21:00 UTC) -----
-            if weekday == 4 and hour >= 21 and last_weekly_date != today:
-                st, _ = compute_stats("weekly")
-                msg = format_report(st)
-                if msg:
-                    send_alert("📅 <b>FRIDAY WEEKLY CLOSE</b>\n\n" + msg)
-                    print("Weekly report sent", flush=True)
-                last_weekly_date = today
-
-            print(f"Open: {len(load_open())} | Sleep 30s", flush=True)
+            print(f"Open trades: {len(load_open())} | Sleep 30s", flush=True)
             time.sleep(30)
 
         except Exception as e:
