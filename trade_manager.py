@@ -7,10 +7,9 @@ from data_feed import get_ohlc
 OPEN_FILE = "open_trades.json"
 CLOSED_FILE = "closed_trades.json"
 
-# Safety constants
-MIN_AGE_SECONDS = 35 * 60      # \~35 min ≈ 1+ M30 bar before first check
-MAX_AGE_HOURS = 72            # expire after 72h
-LOOKBACK_BARS = 40            # how many recent bars to scan for hit
+MIN_AGE_SECONDS = 35 * 60
+MAX_AGE_HOURS = 72
+LOOKBACK_BARS = 40
 
 def _load(path):
     if not os.path.exists(path):
@@ -40,10 +39,7 @@ def append_closed(trade):
     _save(CLOSED_FILE, closed)
 
 def add_open_trade(sig):
-    """Only called after a clean alert was sent."""
     trades = load_open()
-
-    # One open trade per market
     for t in trades:
         if t["market"] == sig["market"]:
             print(f"  [TRACK] Already open on {sig['market']} → skip", flush=True)
@@ -69,13 +65,6 @@ def add_open_trade(sig):
     return True
 
 def check_open_trades():
-    """
-    Safe rules:
-    - Only check trades older than MIN_AGE_SECONDS
-    - Never evaluate the entry bar itself (we only look at recent closed bars
-      after the trade has aged)
-    - Expire after MAX_AGE_HOURS
-    """
     trades = load_open()
     still_open = []
     newly_closed = []
@@ -84,12 +73,10 @@ def check_open_trades():
         age_sec = time.time() - t["opened_ts"]
         age_hours = age_sec / 3600
 
-        # Too young → do not check yet
         if age_sec < MIN_AGE_SECONDS:
             still_open.append(t)
             continue
 
-        # Expired
         if age_hours >= MAX_AGE_HOURS:
             ohlc = get_ohlc(t["market"], t["tf"], limit=50)
             exit_price = float(ohlc["close"][-1]) if ohlc is not None else t["entry"]
@@ -110,7 +97,6 @@ def check_open_trades():
             print(f"  [TRACK] EXPIRED {t['mode']} → {r_mult:+.2f}R", flush=True)
             continue
 
-        # Check SL / TP on recent bars only
         ohlc = get_ohlc(t["market"], t["tf"], limit=100)
         if ohlc is None:
             still_open.append(t)
@@ -121,7 +107,6 @@ def check_open_trades():
 
         hit = None
         exit_price = None
-
         for i in range(start, len(close)):
             if t["direction"] == "LONG":
                 if low[i] <= t["sl"]:
@@ -164,11 +149,9 @@ def check_open_trades():
     return newly_closed
 
 def closed_today_stats():
-    """Stats for trades closed in the last 24h (for daily summary)."""
     closed = load_closed()
     if not closed:
         return None
-
     now = datetime.now(timezone.utc)
     today = []
     for t in closed:
@@ -178,20 +161,15 @@ def closed_today_stats():
                 today.append(t)
         except Exception:
             continue
-
     if not today:
         return None
-
     rs = [t["r_multiple"] for t in today]
     wins = [r for r in rs if r > 0]
     n = len(rs)
-    wr = 100.0 * len(wins) / n if n else 0
-    net_r = sum(rs)
-
     return {
         "n": n,
         "wins": len(wins),
         "losses": n - len(wins),
-        "wr": round(wr, 1),
-        "net_r": round(net_r, 2)
+        "wr": round(100.0 * len(wins) / n, 1),
+        "net_r": round(sum(rs), 2)
     }
