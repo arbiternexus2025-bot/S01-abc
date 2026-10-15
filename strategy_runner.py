@@ -2,44 +2,50 @@ from datetime import datetime, timezone
 from S09_pattern_detection import detect_s09_signals
 
 MODES = [
-    # USDJPY
-    {"id": "S09_SW050_Active_USDJPY", "market": "USDJPY", "tf": "M30",
-     "wick": 0.50, "rr": 2.5, "session": "Active", "priority": 110},
-    {"id": "S09_SW050_NY_USDJPY", "market": "USDJPY", "tf": "M30",
-     "wick": 0.50, "rr": 2.5, "session": "NY", "priority": 100},
-    {"id": "S09_W045_Active_USDJPY", "market": "USDJPY", "tf": "M30",
-     "wick": 0.45, "rr": 2.5, "session": "Active", "priority": 95},
-    {"id": "S09_W040_NY_USDJPY", "market": "USDJPY", "tf": "M30",
-     "wick": 0.40, "rr": 2.5, "session": "NY", "priority": 90},
+    # ----- AGE family -----
+    {"id": "Age_USDJPY_M30_W045_A150", "family": "Age", "market": "USDJPY", "tf": "M30",
+     "wick": 0.45, "age": 150, "session": None, "close": False, "rr": 2.5, "priority": 100},
+    {"id": "Age_USDJPY_M30_W040_A150", "family": "Age", "market": "USDJPY", "tf": "M30",
+     "wick": 0.40, "age": 150, "session": None, "close": False, "rr": 2.5, "priority": 98},
+    {"id": "Age_EURUSD_M15_W050_A150", "family": "Age", "market": "EURUSD", "tf": "M15",
+     "wick": 0.50, "age": 150, "session": None, "close": False, "rr": 2.5, "priority": 96},
+    {"id": "Age_USDJPY_M15_W050_A150", "family": "Age", "market": "USDJPY", "tf": "M15",
+     "wick": 0.50, "age": 150, "session": None, "close": False, "rr": 2.5, "priority": 94},
+    {"id": "Age_USDJPY_M15_W050_A120", "family": "Age", "market": "USDJPY", "tf": "M15",
+     "wick": 0.50, "age": 120, "session": None, "close": False, "rr": 2.5, "priority": 92},
+    {"id": "Age_USDJPY_M30_W050_A120", "family": "Age", "market": "USDJPY", "tf": "M30",
+     "wick": 0.50, "age": 120, "session": None, "close": False, "rr": 2.5, "priority": 90},
 
-    # GBPUSD
-    {"id": "S09_SW050_NY_GBPUSD", "market": "GBPUSD", "tf": "M30",
-     "wick": 0.50, "rr": 2.5, "session": "NY", "priority": 105},
-    {"id": "S09_W045_NY_GBPUSD", "market": "GBPUSD", "tf": "M30",
-     "wick": 0.45, "rr": 2.5, "session": "NY", "priority": 85},
+    # ----- CLOSE family (highest quality) -----
+    {"id": "Close_EURUSD_M15_W050_A150", "family": "Close", "market": "EURUSD", "tf": "M15",
+     "wick": 0.50, "age": 150, "session": None, "close": True, "rr": 2.5, "priority": 120},
+    {"id": "Close_GBPUSD_M30_W038_A120", "family": "Close", "market": "GBPUSD", "tf": "M30",
+     "wick": 0.38, "age": 120, "session": None, "close": True, "rr": 2.5, "priority": 118},
+    {"id": "Close_EURUSD_M15_W050_A120", "family": "Close", "market": "EURUSD", "tf": "M15",
+     "wick": 0.50, "age": 120, "session": None, "close": True, "rr": 2.5, "priority": 116},
+    {"id": "Close_EURUSD_M15_W045_A150", "family": "Close", "market": "EURUSD", "tf": "M15",
+     "wick": 0.45, "age": 150, "session": None, "close": True, "rr": 2.5, "priority": 114},
+    {"id": "Close_USDCHF_M15_W050_A150", "family": "Close", "market": "USDCHF", "tf": "M15",
+     "wick": 0.50, "age": 150, "session": None, "close": True, "rr": 2.5, "priority": 112},
+    {"id": "Close_GBPUSD_M30_W045_A120", "family": "Close", "market": "GBPUSD", "tf": "M30",
+     "wick": 0.45, "age": 120, "session": None, "close": True, "rr": 2.5, "priority": 110},
 
-    # USDCHF
-    {"id": "S09_SW050_Active_USDCHF", "market": "USDCHF", "tf": "M30",
-     "wick": 0.50, "rr": 2.5, "session": "Active", "priority": 100},
-    {"id": "S09_SW050_London_USDCHF", "market": "USDCHF", "tf": "M30",
-     "wick": 0.50, "rr": 2.5, "session": "London", "priority": 95},
-    {"id": "S09_W045_London_USDCHF", "market": "USDCHF", "tf": "M30",
-     "wick": 0.45, "rr": 2.5, "session": "London", "priority": 80},
-
-    # EURUSD
-    {"id": "S09_SW050_NY_EURUSD", "market": "EURUSD", "tf": "M30",
-     "wick": 0.50, "rr": 2.5, "session": "NY", "priority": 95},
-    {"id": "S09_W045_NY_EURUSD", "market": "EURUSD", "tf": "M30",
-     "wick": 0.45, "rr": 2.5, "session": "NY", "priority": 80},
-
-    # XAUUSD
-    {"id": "S09_W045_London_XAUUSD", "market": "XAUUSD", "tf": "M30",
-     "wick": 0.45, "rr": 2.5, "session": "London", "priority": 90},
-    {"id": "S09_W040_London_XAUUSD", "market": "XAUUSD", "tf": "M30",
-     "wick": 0.40, "rr": 2.5, "session": "London", "priority": 75},
+    # ----- SESSION family (LondonNY dropped) -----
+    {"id": "Sess_EURUSD_M5_W050_London", "family": "Session", "market": "EURUSD", "tf": "M5",
+     "wick": 0.50, "age": 120, "session": "London", "close": False, "rr": 2.5, "priority": 105},
+    {"id": "Sess_GBPUSD_M5_W050_London", "family": "Session", "market": "GBPUSD", "tf": "M5",
+     "wick": 0.50, "age": 120, "session": "London", "close": False, "rr": 2.5, "priority": 103},
+    {"id": "Sess_USDJPY_M30_W050_Active", "family": "Session", "market": "USDJPY", "tf": "M30",
+     "wick": 0.50, "age": 120, "session": "Active", "close": False, "rr": 2.5, "priority": 101},
+    {"id": "Sess_USDJPY_M15_W050_NY", "family": "Session", "market": "USDJPY", "tf": "M15",
+     "wick": 0.50, "age": 120, "session": "NY", "close": False, "rr": 2.5, "priority": 99},
+    {"id": "Sess_GBPUSD_M5_W045_London", "family": "Session", "market": "GBPUSD", "tf": "M5",
+     "wick": 0.45, "age": 120, "session": "London", "close": False, "rr": 2.5, "priority": 97},
 ]
 
 def in_session(session_name):
+    if session_name is None:
+        return True
     h = datetime.now(timezone.utc).hour
     if session_name == "Active":
         return 7 <= h < 21
@@ -49,8 +55,9 @@ def in_session(session_name):
         return 12 <= h < 21
     return True
 
-def _is_fresh(entry_bar, n):
-    return entry_bar >= n - 2
+def _is_fresh(entry_bar, n, tf):
+    lookback = 3 if tf == "M5" else 2
+    return entry_bar >= n - lookback
 
 def _stop_still_valid(sig, ohlc):
     high, low, close = ohlc["high"], ohlc["low"], ohlc["close"]
@@ -72,15 +79,20 @@ def _stop_still_valid(sig, ohlc):
     return True, "ok"
 
 def run_s09(mode, ohlc):
-    if not in_session(mode["session"]):
+    if not in_session(mode.get("session")):
         return None
     high, low, open_, close = ohlc["high"], ohlc["low"], ohlc["open"], ohlc["close"]
-    signals = detect_s09_signals(high, low, open_, close,
-                                 wick_mult=mode["wick"], rr=mode.get("rr", 2.5))
+    signals = detect_s09_signals(
+        high, low, open_, close,
+        wick_mult=mode["wick"],
+        rr=mode.get("rr", 2.5),
+        max_zone_age=mode.get("age", 120),
+        require_close=mode.get("close", False)
+    )
     if not signals:
         return None
     s = signals[-1]
-    if not _is_fresh(s.entry_bar, len(close)):
+    if not _is_fresh(s.entry_bar, len(close), mode["tf"]):
         print("     Rejected → stale", flush=True)
         return None
     return {
@@ -91,9 +103,8 @@ def run_s09(mode, ohlc):
         "entry": round(float(s.entry_price), 5),
         "sl": round(float(s.stop), 5),
         "tp": round(float(s.target), 5),
-        "family": "S09",
+        "family": mode["family"],
         "priority": mode["priority"],
-        "premium": True,
         "risk": abs(float(s.entry_price) - float(s.stop))
     }
 
