@@ -129,7 +129,8 @@ def detect_sd_zones(high, low, open_, close, atr,
     return zones
 
 def generate_signals_with_wick(high, low, open_, close, atr, zones,
-                               rr=2.5, max_zone_age=120, min_impulse_atr=1.5, wick_mult=0.50):
+                               rr=2.5, max_zone_age=120, min_impulse_atr=1.5,
+                               wick_mult=0.50, require_close=False):
     n = len(close)
     signals = []
     last_exit = -1
@@ -153,11 +154,15 @@ def generate_signals_with_wick(high, low, open_, close, atr, zones,
                 if lower_wick < wick_mult * a:
                     continue
                 wick_val = lower_wick / a
+                if require_close and close[j] < z.proximal:
+                    continue
             else:
                 upper_wick = high[j] - max(open_[j], close[j])
                 if upper_wick < wick_mult * a:
                     continue
                 wick_val = upper_wick / a
+                if require_close and close[j] > z.proximal:
+                    continue
 
             entry = z.proximal
             risk = abs(entry - z.distal)
@@ -174,10 +179,13 @@ def generate_signals_with_wick(high, low, open_, close, atr, zones,
             break
     return signals
 
-def detect_s09_signals(high, low, open_, close, wick_mult=0.50, rr=2.5, min_impulse_atr=1.5):
+def detect_s09_signals(high, low, open_, close,
+                       wick_mult=0.50, rr=2.5, min_impulse_atr=1.5,
+                       max_zone_age=120, require_close=False):
     atr = compute_atr(high, low, close)
     zones = detect_sd_zones(high, low, open_, close, atr, min_impulse_atr=min_impulse_atr)
     return generate_signals_with_wick(
         high, low, open_, close, atr, zones,
-        rr=rr, wick_mult=wick_mult, min_impulse_atr=min_impulse_atr
+        rr=rr, wick_mult=wick_mult, min_impulse_atr=min_impulse_atr,
+        max_zone_age=max_zone_age, require_close=require_close
     )
