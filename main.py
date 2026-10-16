@@ -15,11 +15,7 @@ app = Flask(__name__)
 def health():
     return "OK", 200
 
-# ---------- Scan intervals (seconds) ----------
-SCAN_M5  = 120   # every 2 minutes
-SCAN_M15 = 180   # every 3 minutes
-SCAN_M30 = 240   # every 4 minutes
-# ----------------------------------------------
+SCAN_M5, SCAN_M15, SCAN_M30 = 120, 180, 240
 
 def format_signal(s):
     emoji = "🟢 LONG" if s["direction"] == "LONG" else "🔴 SHORT"
@@ -29,19 +25,16 @@ def format_signal(s):
 Mode: <b>{s['mode']}</b>
 Market: <b>{s['market']} {s['tf']}</b>
 Direction: {emoji}
+Bias: {s.get('bias', '?')}
 
 Entry: <code>{s['entry']}</code>
 Stop Loss: <code>{s['sl']}</code>
 Take Profit: <code>{s['tp']}</code>
+RR: 2.0
 """.strip()
 
 def format_closed(t):
-    if t["status"] == "TP":
-        icon = "✅ HIT TP"
-    elif t["status"] == "SL":
-        icon = "❌ HIT SL"
-    else:
-        icon = "⏱ EXPIRED"
+    icon = {"TP": "✅ HIT TP", "SL": "❌ HIT SL"}.get(t["status"], "⏱ EXPIRED")
     return f"""
 {icon}
 
@@ -55,76 +48,60 @@ Duration: {t['duration_hours']}h
 """.strip()
 
 def format_daily(alert_stats, trade_stats):
-    lines = ["📊 <b>DAILY SUMMARY</b>", ""]
-    lines.append(f"Alerts sent: {alert_stats.get('total', 0)}")
-    if alert_stats.get("by_market"):
-        for m, c in sorted(alert_stats["by_market"].items()):
-            lines.append(f"  {m}: {c}")
+    lines = ["📊 <b>DAILY SUMMARY</b>", "", f"Alerts: {alert_stats.get('total', 0)}"]
+    for m, c in sorted(alert_stats.get("by_market", {}).items()):
+        lines.append(f"  {m}: {c}")
     lines.append("")
     if trade_stats:
-        lines.append("<b>Closed trades (24h)</b>")
-        lines.append(f"Trades: {trade_stats['n']}")
-        lines.append(f"Wins / Losses: {trade_stats['wins']} / {trade_stats['losses']}")
-        lines.append(f"Win Rate: {trade_stats['wr']}%")
-        lines.append(f"Net: <b>{trade_stats['net_r']:+.2f}R</b>")
+        lines += [
+            "<b>Closed (24h)</b>",
+            f"N={trade_stats['n']}  W/L={trade_stats['wins']}/{trade_stats['losses']}",
+            f"WR={trade_stats['wr']}%  Net=<b>{trade_stats['net_r']:+.2f}R</b>",
+        ]
     else:
-        lines.append("No trades closed in last 24h")
-    lines.append("")
-    lines.append(f"Currently open: {len(load_open())}")
+        lines.append("No closes in 24h")
+    lines += ["", f"Open now: {len(load_open())}"]
     return "\n".join(lines)
 
 def run_loop():
-    print("=== 17-MODE ENGINE — Per-TF Scan Frequency ===", flush=True)
-    print(f"Modes: {len(MODES)}", flush=True)
-    print(f"M5  every {SCAN_M5}s | M15 every {SCAN_M15}s | M30 every {SCAN_M30}s", flush=True)
-    print("-" * 55, flush=True)
+    print("=== S09 OFFICIAL SPEC ENGINE ===", flush=True)
+    print(f"Modes: {len(MODES)} | RR=2.0 | H4 bias ON | timestamps ON", flush=True)
+    print("Exit: bars after entry only | no 35min lock", flush=True)
+    print(f"Scan M5={SCAN_M5}s M15={SCAN_M15}s M30={SCAN_M30}s", flush=True)
+    print("-" * 60, flush=True)
 
     last_alert = {}
-    last_m5 = 0
-    last_m15 = 0
-    last_m30 = 0
-    last_daily_date = None
-    daily_alerts = {"total": 0, "by_market": {}}
+    last_m5 = last_m15 = last_m30 = 0
+    last_daily = None
+    daily = {"total": 0, "by_market": {}}
 
-    m5_modes  = [m for m in MODES if m["tf"] == "M5"]
-    m15_modes = [m for m in MODES if m["tf"] == "M15"]
-    m30_modes = [m for m in MODES if m["tf"] == "M30"]
-
-    print(f"M5 modes: {len(m5_modes)} | M15: {len(m15_modes)} | M30: {len(m30_modes)}", flush=True)
+    m5  = [m for m in MODES if m["tf"] == "M5"]
+    m15 = [m for m in MODES if m["tf"] == "M15"]
+    m30 = [m for m in MODES if m["tf"] == "M30"]
 
     while True:
         try:
             now = time.time()
             utc = datetime.now(timezone.utc)
             today = utc.date()
-            hour = utc.hour
 
-            # 1. Safe trade check (always)
-            closed = check_open_trades()
-            for t in closed:
+            for t in check_open_trades():
                 send_alert(format_closed(t))
 
             signals = []
-
-            # 2. M5 scan
             if now - last_m5 >= SCAN_M5:
-                print("\n[M5] Scanning...", flush=True)
-                signals += check_modes(m5_modes, get_ohlc)
+                print(f"\n[M5] {utc.strftime('%H:%M')} UTC", flush=True)
+                signals += check_modes(m5, get_ohlc)
                 last_m5 = now
-
-            # 3. M15 scan
             if now - last_m15 >= SCAN_M15:
-                print("\n[M15] Scanning...", flush=True)
-                signals += check_modes(m15_modes, get_ohlc)
+                print(f"\n[M15] {utc.strftime('%H:%M')} UTC", flush=True)
+                signals += check_modes(m15, get_ohlc)
                 last_m15 = now
-
-            # 4. M30 scan
             if now - last_m30 >= SCAN_M30:
-                print("\n[M30] Scanning...", flush=True)
-                signals += check_modes(m30_modes, get_ohlc)
+                print(f"\n[M30] {utc.strftime('%H:%M')} UTC", flush=True)
+                signals += check_modes(m30, get_ohlc)
                 last_m30 = now
 
-            # 5. Highest-mode filter + alert
             if signals:
                 signals = select_highest_modes(signals)
                 for s in signals:
@@ -132,30 +109,24 @@ def run_loop():
                     if now - last_alert.get(key, 0) > 7200:
                         if send_alert(format_signal(s)):
                             last_alert[key] = now
-                            print(f"ALERT SENT → {s['mode']} {s['direction']}", flush=True)
+                            print(f"ALERT → {s['mode']} {s['direction']}", flush=True)
                             add_open_trade(s)
-                            daily_alerts["total"] += 1
-                            daily_alerts["by_market"][s["market"]] = \
-                                daily_alerts["by_market"].get(s["market"], 0) + 1
+                            daily["total"] += 1
+                            daily["by_market"][s["market"]] = daily["by_market"].get(s["market"], 0) + 1
                     else:
-                        print(f"Skipped (cooldown) → {s['mode']}", flush=True)
+                        print(f"Cooldown → {s['mode']}", flush=True)
 
-            # 6. Daily summary
-            if hour >= 21 and last_daily_date != today:
-                trade_stats = closed_today_stats()
-                send_alert(format_daily(daily_alerts, trade_stats))
-                print("Daily summary sent", flush=True)
-                daily_alerts = {"total": 0, "by_market": {}}
-                last_daily_date = today
+            if utc.hour >= 21 and last_daily != today:
+                send_alert(format_daily(daily, closed_today_stats()))
+                daily = {"total": 0, "by_market": {}}
+                last_daily = today
 
             print(f"Open: {len(load_open())} | Sleep 20s", flush=True)
             time.sleep(20)
-
         except Exception as e:
-            print("Loop error:", str(e), flush=True)
+            print("Loop error:", e, flush=True)
             time.sleep(30)
 
 if __name__ == "__main__":
-    t = threading.Thread(target=run_loop, daemon=True)
-    t.start()
+    threading.Thread(target=run_loop, daemon=True).start()
     app.run(host="0.0.0.0", port=10000)
