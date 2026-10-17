@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""
-S09 official rules:
-- Impulse: body≥0.50 ATR, range≥0.65 ATR, close beyond prev high/low
-- Base 1–6 bars, base range ≤1.30 ATR, zone height ≥0.20 ATR
-- Impulse distance ≥1.30 ATR
-- First proximal touch only, age 2..max_age, zone consumed
-- Wick on touch bar; optional directional close (close≥open / close≤open)
-- Risk 0.20–4.0 ATR; TP = 2.0R
-"""
+"""S09 detector — per-mode geometry params from promote list"""
 
 from __future__ import annotations
 import numpy as np
@@ -60,10 +52,6 @@ def compute_ema(close, length):
     return ema
 
 def h4_bias(high, low, close):
-    """
-    +1 bullish, -1 bearish, 0 flat.
-    EMA20 > EMA50 and Close > EMA50 and (new high or higher low vs prior 8).
-    """
     if len(close) < 60:
         return 0
     ema20 = compute_ema(close, 20)
@@ -71,29 +59,25 @@ def h4_bias(high, low, close):
     i = len(close) - 1
     if np.isnan(ema20[i]) or np.isnan(ema50[i]):
         return 0
-    # structure last 8 vs prior 8
     h1 = float(np.max(high[i - 7:i + 1]))
     h0 = float(np.max(high[i - 15:i - 7]))
     l1 = float(np.min(low[i - 7:i + 1]))
     l0 = float(np.min(low[i - 15:i - 7]))
     bull_struct = (h1 > h0) or (l1 > l0)
     bear_struct = (l1 < l0) or (h1 < h0)
-
     if ema20[i] > ema50[i] and close[i] > ema50[i] and bull_struct:
         return 1
     if ema20[i] < ema50[i] and close[i] < ema50[i] and bear_struct:
         return -1
     return 0
 
-def detect_sd_zones(high, low, open_, close, atr):
-    """Official impulse + base geometry."""
+def detect_sd_zones(high, low, open_, close, atr,
+                    min_impulse_atr=1.3, body_mult=0.50, range_mult=0.65,
+                    max_base_atr=1.3, min_zone_atr=0.20,
+                    min_base_bars=1, max_base_bars=6):
     n = len(close)
     zones = []
     i = 40
-    body_mult, range_mult = 0.50, 0.65
-    min_imp, max_base_atr, min_zone = 1.30, 1.30, 0.20
-    min_base, max_base = 1, 6
-
     while i < n - 1:
         if np.isnan(atr[i]) or atr[i] < 1e-9:
             i += 1
@@ -103,10 +87,9 @@ def detect_sd_zones(high, low, open_, close, atr):
         body_up = close[i] - open_[i]
         body_dn = open_[i] - close[i]
 
-        # Demand impulse
         if body_up >= body_mult * a and rng >= range_mult * a and close[i] > high[i - 1]:
             found = False
-            for bl in range(min_base, max_base + 1):
+            for bl in range(min_base_bars, max_base_bars + 1):
                 bs = i - bl
                 if bs < 5:
                     break
@@ -120,9 +103,9 @@ def detect_sd_zones(high, low, open_, close, atr):
                 if prox <= dist:
                     continue
                 imp = (close[i] - b_low) / a
-                if imp < min_imp:
+                if imp < min_impulse_atr:
                     continue
-                if (prox - dist) / a < min_zone:
+                if (prox - dist) / a < min_zone_atr:
                     continue
                 zones.append(SDZone(1, prox, dist, i, "DEM", imp))
                 found = True
@@ -132,10 +115,9 @@ def detect_sd_zones(high, low, open_, close, atr):
                 i += 1
             continue
 
-        # Supply impulse
         if body_dn >= body_mult * a and rng >= range_mult * a and close[i] < low[i - 1]:
             found = False
-            for bl in range(min_base, max_base + 1):
+            for bl in range(min_base_bars, max_base_bars + 1):
                 bs = i - bl
                 if bs < 5:
                     break
@@ -149,9 +131,9 @@ def detect_sd_zones(high, low, open_, close, atr):
                 if prox >= dist:
                     continue
                 imp = (b_high - close[i]) / a
-                if imp < min_imp:
+                if imp < min_impulse_atr:
                     continue
-                if (dist - prox) / a < min_zone:
+                if (dist - prox) / a < min_zone_atr:
                     continue
                 zones.append(SDZone(-1, prox, dist, i, "SUP", imp))
                 found = True
@@ -165,10 +147,6 @@ def detect_sd_zones(high, low, open_, close, atr):
 
 def generate_signals(high, low, open_, close, atr, zones,
                      wick_mult=0.50, max_zone_age=120, require_close=False, rr=2.0):
-    """
-    First touch only. Zone consumed on touch even if filters fail.
-    Returns list of signals (historical). Live layer filters freshness.
-    """
     n = len(close)
     signals = []
     seen = set()
@@ -183,14 +161,11 @@ def generate_signals(high, low, open_, close, atr, zones,
             if not (low[j] <= z.proximal <= high[j]):
                 continue
 
-            # consume zone on first touch
             seen.add(z.created_bar)
-
             a = atr[j]
             if np.isnan(a) or a < 1e-9:
                 break
 
-            # wick
             if z.direction == 1:
                 wick = min(open_[j], close[j]) - low[j]
                 if wick < wick_mult * a:
@@ -202,7 +177,6 @@ def generate_signals(high, low, open_, close, atr, zones,
                     break
                 wick_val = wick / a
 
-            # directional close
             if require_close:
                 if z.direction == 1 and close[j] < open_[j]:
                     break
@@ -223,10 +197,16 @@ def generate_signals(high, low, open_, close, atr, zones,
             break
     return signals
 
-def detect_s09(high, low, open_, close, wick_mult=0.50, max_zone_age=120,
-               require_close=False, rr=2.0):
-    atr = compute_atr(high, low, close)
-    zones = detect_sd_zones(high, low, open_, close, atr)
+def detect_s09(high, low, open_, close,
+               wick_mult=0.50, max_zone_age=120, require_close=False, rr=2.0,
+               atr_len=14, min_imp=1.3, body=0.50, rng=0.65,
+               max_ba=1.3, min_z=0.20):
+    atr = compute_atr(high, low, close, length=atr_len)
+    zones = detect_sd_zones(
+        high, low, open_, close, atr,
+        min_impulse_atr=min_imp, body_mult=body, range_mult=rng,
+        max_base_atr=max_ba, min_zone_atr=min_z
+    )
     signals = generate_signals(
         high, low, open_, close, atr, zones,
         wick_mult=wick_mult, max_zone_age=max_zone_age,
