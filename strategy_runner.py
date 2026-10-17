@@ -2,50 +2,105 @@ from datetime import datetime, timezone
 from data_feed import get_ohlc
 from S09_pattern_detection import detect_s09, h4_bias
 
-# Official 18 modes (LondonNY included per spec)
+# ============================================================
+# MAIN BOOK — Top 6 Session (primary)
+# SATELLITE — Top 9 Close (quality)
+# ============================================================
+
 MODES = [
-    # AGE
-    {"id": "Age_USDJPY_M30_W045_A150", "family": "Age", "market": "USDJPY", "tf": "M30",
-     "wick": 0.45, "age": 150, "session": None, "close": False, "priority": 100},
-    {"id": "Age_USDJPY_M30_W040_A150", "family": "Age", "market": "USDJPY", "tf": "M30",
-     "wick": 0.40, "age": 150, "session": None, "close": False, "priority": 98},
-    {"id": "Age_EURUSD_M15_W050_A150", "family": "Age", "market": "EURUSD", "tf": "M15",
-     "wick": 0.50, "age": 150, "session": None, "close": False, "priority": 96},
-    {"id": "Age_USDJPY_M15_W050_A150", "family": "Age", "market": "USDJPY", "tf": "M15",
-     "wick": 0.50, "age": 150, "session": None, "close": False, "priority": 94},
-    {"id": "Age_USDJPY_M15_W050_A120", "family": "Age", "market": "USDJPY", "tf": "M15",
-     "wick": 0.50, "age": 120, "session": None, "close": False, "priority": 92},
-    {"id": "Age_USDJPY_M30_W050_A120", "family": "Age", "market": "USDJPY", "tf": "M30",
-     "wick": 0.50, "age": 120, "session": None, "close": False, "priority": 90},
-    # CLOSE
-    {"id": "Close_EURUSD_M15_W050_A150", "family": "Close", "market": "EURUSD", "tf": "M15",
-     "wick": 0.50, "age": 150, "session": None, "close": True, "priority": 120},
-    {"id": "Close_GBPUSD_M30_W038_A120", "family": "Close", "market": "GBPUSD", "tf": "M30",
-     "wick": 0.38, "age": 120, "session": None, "close": True, "priority": 118},
-    {"id": "Close_EURUSD_M15_W050_A120", "family": "Close", "market": "EURUSD", "tf": "M15",
-     "wick": 0.50, "age": 120, "session": None, "close": True, "priority": 116},
-    {"id": "Close_EURUSD_M15_W045_A150", "family": "Close", "market": "EURUSD", "tf": "M15",
-     "wick": 0.45, "age": 150, "session": None, "close": True, "priority": 114},
-    {"id": "Close_USDCHF_M15_W050_A150", "family": "Close", "market": "USDCHF", "tf": "M15",
-     "wick": 0.50, "age": 150, "session": None, "close": True, "priority": 112},
-    {"id": "Close_GBPUSD_M30_W045_A120", "family": "Close", "market": "GBPUSD", "tf": "M30",
-     "wick": 0.45, "age": 120, "session": None, "close": True, "priority": 110},
-    # SESSION
-    {"id": "Sess_EURUSD_M5_W050_London", "family": "Session", "market": "EURUSD", "tf": "M5",
-     "wick": 0.50, "age": 120, "session": "London", "close": False, "priority": 105},
-    {"id": "Sess_GBPUSD_M5_W050_London", "family": "Session", "market": "GBPUSD", "tf": "M5",
-     "wick": 0.50, "age": 120, "session": "London", "close": False, "priority": 103},
-    {"id": "Sess_USDJPY_M30_W050_Active", "family": "Session", "market": "USDJPY", "tf": "M30",
-     "wick": 0.50, "age": 120, "session": "Active", "close": False, "priority": 101},
-    {"id": "Sess_USDJPY_M30_W050_LondonNY", "family": "Session", "market": "USDJPY", "tf": "M30",
-     "wick": 0.50, "age": 120, "session": "LondonNY", "close": False, "priority": 100},
-    {"id": "Sess_USDJPY_M15_W050_NY", "family": "Session", "market": "USDJPY", "tf": "M15",
-     "wick": 0.50, "age": 120, "session": "NY", "close": False, "priority": 99},
-    {"id": "Sess_GBPUSD_M5_W045_London", "family": "Session", "market": "GBPUSD", "tf": "M5",
-     "wick": 0.45, "age": 120, "session": "London", "close": False, "priority": 97},
+    # ----- MAIN SESSION #1–6 -----
+    {"id": "Sess_JPY_M30_W050_Active_BaseLoose", "book": "Main", "family": "Session",
+     "market": "USDJPY", "tf": "M30", "wick": 0.50, "age": 120,
+     "session": "Active", "close": False, "rr": 2.0,
+     "atr_len": 14, "min_imp": 1.3, "body": 0.50, "rng": 0.65,
+     "max_ba": 1.5, "min_z": 0.15, "priority": 110},
+
+    {"id": "Sess_JPY_M30_W050_Active_FreqPush", "book": "Main", "family": "Session",
+     "market": "USDJPY", "tf": "M30", "wick": 0.50, "age": 120,
+     "session": "Active", "close": False, "rr": 1.8,
+     "atr_len": 14, "min_imp": 1.2, "body": 0.45, "rng": 0.60,
+     "max_ba": 1.4, "min_z": 0.18, "priority": 108},
+
+    {"id": "Sess_JPY_M30_W050_Active_Imp12", "book": "Main", "family": "Session",
+     "market": "USDJPY", "tf": "M30", "wick": 0.50, "age": 120,
+     "session": "Active", "close": False, "rr": 2.0,
+     "atr_len": 14, "min_imp": 1.2, "body": 0.50, "rng": 0.65,
+     "max_ba": 1.3, "min_z": 0.20, "priority": 106},
+
+    {"id": "Sess_JPY_M30_W050_Active", "book": "Main", "family": "Session",
+     "market": "USDJPY", "tf": "M30", "wick": 0.50, "age": 120,
+     "session": "Active", "close": False, "rr": 2.0,
+     "atr_len": 14, "min_imp": 1.3, "body": 0.50, "rng": 0.65,
+     "max_ba": 1.3, "min_z": 0.20, "priority": 104},
+
+    {"id": "Sess_EUR_M5_W050_London", "book": "Main", "family": "Session",
+     "market": "EURUSD", "tf": "M5", "wick": 0.50, "age": 120,
+     "session": "London", "close": False, "rr": 2.0,
+     "atr_len": 14, "min_imp": 1.3, "body": 0.50, "rng": 0.65,
+     "max_ba": 1.3, "min_z": 0.20, "priority": 102},
+
+    {"id": "Sess_JPY_M15_W050_NY", "book": "Main", "family": "Session",
+     "market": "USDJPY", "tf": "M15", "wick": 0.50, "age": 120,
+     "session": "NY", "close": False, "rr": 2.0,
+     "atr_len": 14, "min_imp": 1.3, "body": 0.50, "rng": 0.65,
+     "max_ba": 1.3, "min_z": 0.20, "priority": 100},
+
+    # ----- SATELLITE CLOSE #1–9 -----
+    {"id": "Close_EUR_M15_W050_RR25", "book": "Satellite", "family": "Close",
+     "market": "EURUSD", "tf": "M15", "wick": 0.50, "age": 150,
+     "session": None, "close": True, "rr": 2.5,
+     "atr_len": 14, "min_imp": 1.3, "body": 0.50, "rng": 0.65,
+     "max_ba": 1.3, "min_z": 0.20, "priority": 120},
+
+    {"id": "Close_EUR_M15_W050_ATR20", "book": "Satellite", "family": "Close",
+     "market": "EURUSD", "tf": "M15", "wick": 0.50, "age": 150,
+     "session": None, "close": True, "rr": 2.0,
+     "atr_len": 20, "min_imp": 1.3, "body": 0.50, "rng": 0.65,
+     "max_ba": 1.3, "min_z": 0.20, "priority": 118},
+
+    {"id": "Close_EUR_M15_W050_A150", "book": "Satellite", "family": "Close",
+     "market": "EURUSD", "tf": "M15", "wick": 0.50, "age": 150,
+     "session": None, "close": True, "rr": 2.0,
+     "atr_len": 14, "min_imp": 1.3, "body": 0.50, "rng": 0.65,
+     "max_ba": 1.3, "min_z": 0.20, "priority": 116},
+
+    {"id": "Close_GBP_M30_W038_A120", "book": "Satellite", "family": "Close",
+     "market": "GBPUSD", "tf": "M30", "wick": 0.38, "age": 120,
+     "session": None, "close": True, "rr": 2.0,
+     "atr_len": 14, "min_imp": 1.3, "body": 0.50, "rng": 0.65,
+     "max_ba": 1.3, "min_z": 0.20, "priority": 114},
+
+    {"id": "Close_EUR_M15_W050_A120", "book": "Satellite", "family": "Close",
+     "market": "EURUSD", "tf": "M15", "wick": 0.50, "age": 120,
+     "session": None, "close": True, "rr": 2.0,
+     "atr_len": 14, "min_imp": 1.3, "body": 0.50, "rng": 0.65,
+     "max_ba": 1.3, "min_z": 0.20, "priority": 112},
+
+    {"id": "Close_EUR_M15_W045_A150", "book": "Satellite", "family": "Close",
+     "market": "EURUSD", "tf": "M15", "wick": 0.45, "age": 150,
+     "session": None, "close": True, "rr": 2.0,
+     "atr_len": 14, "min_imp": 1.3, "body": 0.50, "rng": 0.65,
+     "max_ba": 1.3, "min_z": 0.20, "priority": 110},
+
+    {"id": "Close_CHF_M15_W050_A150", "book": "Satellite", "family": "Close",
+     "market": "USDCHF", "tf": "M15", "wick": 0.50, "age": 150,
+     "session": None, "close": True, "rr": 2.0,
+     "atr_len": 14, "min_imp": 1.3, "body": 0.50, "rng": 0.65,
+     "max_ba": 1.3, "min_z": 0.20, "priority": 108},
+
+    {"id": "Close_GBP_M30_W045_A120", "book": "Satellite", "family": "Close",
+     "market": "GBPUSD", "tf": "M30", "wick": 0.45, "age": 120,
+     "session": None, "close": True, "rr": 2.0,
+     "atr_len": 14, "min_imp": 1.3, "body": 0.50, "rng": 0.65,
+     "max_ba": 1.3, "min_z": 0.20, "priority": 106},
+
+    {"id": "Close_EUR_M15_W050_RR22", "book": "Satellite", "family": "Close",
+     "market": "EURUSD", "tf": "M15", "wick": 0.50, "age": 150,
+     "session": None, "close": True, "rr": 2.2,
+     "atr_len": 14, "min_imp": 1.3, "body": 0.50, "rng": 0.65,
+     "max_ba": 1.3, "min_z": 0.20, "priority": 104},
 ]
 
-RR = 2.0
 FRESH_BARS = 3
 _h4_cache = {}
 
@@ -53,14 +108,12 @@ def in_session(name, hour=None):
     if name is None:
         return True
     h = hour if hour is not None else datetime.now(timezone.utc).hour
+    if name == "Active":
+        return 7 <= h < 20
     if name == "London":
         return 7 <= h < 16
     if name == "NY":
         return 12 <= h < 21
-    if name == "Active":
-        return 7 <= h < 20
-    if name == "LondonNY":
-        return (7 <= h < 16) or (12 <= h < 21)
     return True
 
 def get_bias(market):
@@ -76,21 +129,15 @@ def get_bias(market):
     return b
 
 def run_mode(mode, ohlc):
-    """
-    Returns (sig|None, reason).
-    Reasons: session | bias | no_zones | no_touch | expired | consumed
-             | wick | close | risk | not_fresh | stop_hit | ok
-    """
     high, low, open_, close = ohlc["high"], ohlc["low"], ohlc["open"], ohlc["close"]
     n = len(close)
 
-    # Session (use latest bar hour if time available)
     hour = None
     if "time" in ohlc and len(ohlc["time"]):
         try:
             hour = datetime.fromtimestamp(float(ohlc["time"][-1]), tz=timezone.utc).hour
         except Exception:
-            hour = None
+            pass
     if not in_session(mode.get("session"), hour):
         return None, "session"
 
@@ -103,7 +150,13 @@ def run_mode(mode, ohlc):
         wick_mult=mode["wick"],
         max_zone_age=mode["age"],
         require_close=mode["close"],
-        rr=RR
+        rr=mode["rr"],
+        atr_len=mode.get("atr_len", 14),
+        min_imp=mode.get("min_imp", 1.3),
+        body=mode.get("body", 0.50),
+        rng=mode.get("rng", 0.65),
+        max_ba=mode.get("max_ba", 1.3),
+        min_z=mode.get("min_z", 0.20),
     )
 
     if not zones:
@@ -116,11 +169,9 @@ def run_mode(mode, ohlc):
     if bars_ago > FRESH_BARS:
         return None, f"expired_or_old (bars_ago={bars_ago})"
 
-    # Bias must match direction
     if s.direction != bias:
         return None, "bias"
 
-    # Stop already violated on recent bars after entry
     start = s.entry_bar + 1
     if s.direction == 1:
         for i in range(start, n):
@@ -138,6 +189,7 @@ def run_mode(mode, ohlc):
     return {
         "direction": "LONG" if s.direction == 1 else "SHORT",
         "mode": mode["id"],
+        "book": mode.get("book", ""),
         "market": mode["market"],
         "tf": mode["tf"],
         "entry": round(float(s.entry_price), 5),
@@ -146,6 +198,7 @@ def run_mode(mode, ohlc):
         "family": mode["family"],
         "priority": mode["priority"],
         "risk": abs(float(s.entry_price) - float(s.stop)),
+        "rr": mode["rr"],
         "bars_ago": bars_ago,
         "bias": bias,
     }, "ok"
@@ -174,7 +227,8 @@ def check_modes(modes, get_ohlc_func):
                 continue
             print(
                 f"     [SIGNAL] {sig['direction']} @ {sig['entry']} "
-                f"SL={sig['sl']} TP={sig['tp']} bias={sig['bias']} bars_ago={sig['bars_ago']}",
+                f"SL={sig['sl']} TP={sig['tp']} RR={sig['rr']} "
+                f"bias={sig['bias']} bars_ago={sig['bars_ago']}",
                 flush=True
             )
             results.append(sig)
