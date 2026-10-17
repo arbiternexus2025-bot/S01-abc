@@ -19,8 +19,10 @@ SCAN_M5, SCAN_M15, SCAN_M30 = 120, 180, 240
 
 def format_signal(s):
     emoji = "🟢 LONG" if s["direction"] == "LONG" else "🔴 SHORT"
+    book = s.get("book", "")
+    tag = f"{book} · " if book else ""
     return f"""
-🚨 <b>S09 {s['family'].upper()} SIGNAL</b> ⭐
+🚨 <b>S09 {tag}{s['family'].upper()} SIGNAL</b> ⭐
 
 Mode: <b>{s['mode']}</b>
 Market: <b>{s['market']} {s['tf']}</b>
@@ -30,7 +32,7 @@ Bias: {s.get('bias', '?')}
 Entry: <code>{s['entry']}</code>
 Stop Loss: <code>{s['sl']}</code>
 Take Profit: <code>{s['tp']}</code>
-RR: 2.0
+RR: {s.get('rr', 2.0)}
 """.strip()
 
 def format_closed(t):
@@ -64,9 +66,12 @@ def format_daily(alert_stats, trade_stats):
     return "\n".join(lines)
 
 def run_loop():
-    print("=== S09 OFFICIAL SPEC ENGINE ===", flush=True)
-    print(f"Modes: {len(MODES)} | RR=2.0 | H4 bias ON | timestamps ON", flush=True)
-    print("Exit: bars after entry only | no 35min lock", flush=True)
+    print("=== S09 DEPLOYMENT BOOK ===", flush=True)
+    main = [m for m in MODES if m.get("book") == "Main"]
+    sat  = [m for m in MODES if m.get("book") == "Satellite"]
+    print(f"Main Session: {len(main)} | Satellite Close: {len(sat)} | Total: {len(MODES)}", flush=True)
+    for m in MODES:
+        print(f"  [{m.get('book','?'):9}] {m['id']}", flush=True)
     print(f"Scan M5={SCAN_M5}s M15={SCAN_M15}s M30={SCAN_M30}s", flush=True)
     print("-" * 60, flush=True)
 
@@ -89,15 +94,15 @@ def run_loop():
                 send_alert(format_closed(t))
 
             signals = []
-            if now - last_m5 >= SCAN_M5:
+            if now - last_m5 >= SCAN_M5 and m5:
                 print(f"\n[M5] {utc.strftime('%H:%M')} UTC", flush=True)
                 signals += check_modes(m5, get_ohlc)
                 last_m5 = now
-            if now - last_m15 >= SCAN_M15:
+            if now - last_m15 >= SCAN_M15 and m15:
                 print(f"\n[M15] {utc.strftime('%H:%M')} UTC", flush=True)
                 signals += check_modes(m15, get_ohlc)
                 last_m15 = now
-            if now - last_m30 >= SCAN_M30:
+            if now - last_m30 >= SCAN_M30 and m30:
                 print(f"\n[M30] {utc.strftime('%H:%M')} UTC", flush=True)
                 signals += check_modes(m30, get_ohlc)
                 last_m30 = now
@@ -112,7 +117,8 @@ def run_loop():
                             print(f"ALERT → {s['mode']} {s['direction']}", flush=True)
                             add_open_trade(s)
                             daily["total"] += 1
-                            daily["by_market"][s["market"]] = daily["by_market"].get(s["market"], 0) + 1
+                            daily["by_market"][s["market"]] = \
+                                daily["by_market"].get(s["market"], 0) + 1
                     else:
                         print(f"Cooldown → {s['mode']}", flush=True)
 
