@@ -1,13 +1,10 @@
 from flask import Flask
-import time
-import threading
+import time, threading
 from datetime import datetime, timezone
 from telegram_bot import send_alert
 from data_feed import get_ohlc
 from strategy_runner import MODES, check_modes, select_highest_modes
-from trade_manager import (
-    add_open_trade, check_open_trades, load_open, closed_today_stats
-)
+from trade_manager import add_open_trade, check_open_trades, load_open, closed_today_stats
 
 app = Flask(__name__)
 
@@ -15,19 +12,16 @@ app = Flask(__name__)
 def health():
     return "OK", 200
 
-SCAN_M5, SCAN_M15, SCAN_M30 = 120, 180, 240
+SCAN = {"M5": 120, "M15": 180, "M30": 240, "H1": 300, "H4": 600}
 
 def format_signal(s):
     emoji = "🟢 LONG" if s["direction"] == "LONG" else "🔴 SHORT"
-    book = s.get("book", "")
-    tag = f"{book} · " if book else ""
     return f"""
-🚨 <b>S09 {tag}{s['family'].upper()} SIGNAL</b> ⭐
+🚨 <b>{s['strategy']} {s['family']} SIGNAL</b> ⭐
 
 Mode: <b>{s['mode']}</b>
 Market: <b>{s['market']} {s['tf']}</b>
 Direction: {emoji}
-Bias: {s.get('bias', '?')}
 
 Entry: <code>{s['entry']}</code>
 Stop Loss: <code>{s['sl']}</code>
@@ -57,8 +51,8 @@ def format_daily(alert_stats, trade_stats):
     if trade_stats:
         lines += [
             "<b>Closed (24h)</b>",
-            f"N={trade_stats['n']}  W/L={trade_stats['wins']}/{trade_stats['losses']}",
-            f"WR={trade_stats['wr']}%  Net=<b>{trade_stats['net_r']:+.2f}R</b>",
+            f"N={trade_stats['n']} W/L={trade_stats['wins']}/{trade_stats['losses']}",
+            f"WR={trade_stats['wr']}% Net=<b>{trade_stats['net_r']:+.2f}R</b>",
         ]
     else:
         lines.append("No closes in 24h")
@@ -66,23 +60,22 @@ def format_daily(alert_stats, trade_stats):
     return "\n".join(lines)
 
 def run_loop():
-    print("=== S09 DEPLOYMENT BOOK ===", flush=True)
-    main = [m for m in MODES if m.get("book") == "Main"]
-    sat  = [m for m in MODES if m.get("book") == "Satellite"]
-    print(f"Main Session: {len(main)} | Satellite Close: {len(sat)} | Total: {len(MODES)}", flush=True)
+    print("=== S09 + S19 DUAL ENGINE (self-contained S19) ===", flush=True)
+    s09 = [m for m in MODES if m.get("strategy") == "S09"]
+    s19 = [m for m in MODES if m.get("strategy") == "S19"]
+    print(f"S09: {len(s09)} | S19: {len(s19)} | Total: {len(MODES)}", flush=True)
     for m in MODES:
-        print(f"  [{m.get('book','?'):9}] {m['id']}", flush=True)
-    print(f"Scan M5={SCAN_M5}s M15={SCAN_M15}s M30={SCAN_M30}s", flush=True)
+        extra = f" preset={m['preset']}" if m.get("preset") else ""
+        print(f"  [{m.get('strategy'):3}] {m['id']}{extra}", flush=True)
     print("-" * 60, flush=True)
 
     last_alert = {}
-    last_m5 = last_m15 = last_m30 = 0
+    last_scan = {tf: 0 for tf in SCAN}
     last_daily = None
     daily = {"total": 0, "by_market": {}}
-
-    m5  = [m for m in MODES if m["tf"] == "M5"]
-    m15 = [m for m in MODES if m["tf"] == "M15"]
-    m30 = [m for m in MODES if m["tf"] == "M30"]
+    by_tf = {}
+    for m in MODES:
+        by_tf.setdefault(m["tf"], []).append(m)
 
     while True:
         try:
@@ -94,18 +87,12 @@ def run_loop():
                 send_alert(format_closed(t))
 
             signals = []
-            if now - last_m5 >= SCAN_M5 and m5:
-                print(f"\n[M5] {utc.strftime('%H:%M')} UTC", flush=True)
-                signals += check_modes(m5, get_ohlc)
-                last_m5 = now
-            if now - last_m15 >= SCAN_M15 and m15:
-                print(f"\n[M15] {utc.strftime('%H:%M')} UTC", flush=True)
-                signals += check_modes(m15, get_ohlc)
-                last_m15 = now
-            if now - last_m30 >= SCAN_M30 and m30:
-                print(f"\n[M30] {utc.strftime('%H:%M')} UTC", flush=True)
-                signals += check_modes(m30, get_ohlc)
-                last_m30 = now
+            for tf, modes in by_tf.items():
+                interval = SCAN.get(tf, 240)
+                if now - last_scan[tf] >= interval:
+                    print(f"\n[{tf}] {utc.strftime('%H:%M')} UTC ({len(modes)} modes)", flush=True)
+                    signals += check_modes(modes, get_ohlc)
+                    last_scan[tf] = now
 
             if signals:
                 signals = select_highest_modes(signals)
@@ -119,8 +106,6 @@ def run_loop():
                             daily["total"] += 1
                             daily["by_market"][s["market"]] = \
                                 daily["by_market"].get(s["market"], 0) + 1
-                    else:
-                        print(f"Cooldown → {s['mode']}", flush=True)
 
             if utc.hour >= 21 and last_daily != today:
                 send_alert(format_daily(daily, closed_today_stats()))
