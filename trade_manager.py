@@ -1,6 +1,4 @@
-import json
-import os
-import time
+import json, os, time
 from datetime import datetime, timezone
 from data_feed import get_ohlc
 
@@ -54,17 +52,10 @@ def add_open_trade(sig):
     return True
 
 def check_open_trades():
-    """
-    R1: only bars with time > opened_ts
-    R2: no min-age lock — check every cycle on closed bars after entry
-    First level hit chronologically wins. True duration.
-    """
     trades = load_open()
     still_open, newly = [], []
-
     for t in trades:
         age_h = (time.time() - t["opened_ts"]) / 3600
-
         if age_h >= MAX_AGE_HOURS:
             ohlc = get_ohlc(t["market"], t["tf"], limit=50)
             exit_px = float(ohlc["close"][-1]) if ohlc is not None else t["entry"]
@@ -87,29 +78,21 @@ def check_open_trades():
         if ohlc is None or "time" not in ohlc:
             still_open.append(t)
             continue
-
         high, low, close, tms = ohlc["high"], ohlc["low"], ohlc["close"], ohlc["time"]
         hit, exit_px, exit_ts = None, None, None
-
         for i in range(len(close)):
-            # R1: strictly after entry time
             if float(tms[i]) <= t["opened_ts"]:
                 continue
             if t["direction"] == "LONG":
                 if low[i] <= t["sl"]:
-                    hit, exit_px, exit_ts = "SL", t["sl"], float(tms[i])
-                    break
+                    hit, exit_px, exit_ts = "SL", t["sl"], float(tms[i]); break
                 if high[i] >= t["tp"]:
-                    hit, exit_px, exit_ts = "TP", t["tp"], float(tms[i])
-                    break
+                    hit, exit_px, exit_ts = "TP", t["tp"], float(tms[i]); break
             else:
                 if high[i] >= t["sl"]:
-                    hit, exit_px, exit_ts = "SL", t["sl"], float(tms[i])
-                    break
+                    hit, exit_px, exit_ts = "SL", t["sl"], float(tms[i]); break
                 if low[i] <= t["tp"]:
-                    hit, exit_px, exit_ts = "TP", t["tp"], float(tms[i])
-                    break
-
+                    hit, exit_px, exit_ts = "TP", t["tp"], float(tms[i]); break
         if hit:
             risk = t["risk"] if t["risk"] > 1e-9 else 1e-9
             r = -1.0 if hit == "SL" else (
@@ -126,14 +109,9 @@ def check_open_trades():
             )
             newly.append(closed)
             append_closed(closed)
-            print(
-                f"  [TRACK] {hit} {t['mode']} → {r:+.2f}R "
-                f"dur={closed['duration_hours']}h exit={exit_px}",
-                flush=True
-            )
+            print(f"  [TRACK] {hit} {t['mode']} → {r:+.2f}R dur={closed['duration_hours']}h", flush=True)
         else:
             still_open.append(t)
-
     save_open(still_open)
     return newly
 
