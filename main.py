@@ -1,5 +1,6 @@
 from flask import Flask
-import time, threading
+import time
+import threading
 from datetime import datetime, timezone
 from telegram_bot import send_alert
 from data_feed import get_ohlc
@@ -8,11 +9,14 @@ from trade_manager import add_open_trade, check_open_trades, load_open, closed_t
 
 app = Flask(__name__)
 
+
 @app.route("/health")
 def health():
     return "OK", 200
 
+
 SCAN = {"M5": 120, "M15": 180, "M30": 240, "H1": 300, "H4": 600}
+
 
 def format_signal(s):
     emoji = "🟢 LONG" if s["direction"] == "LONG" else "🔴 SHORT"
@@ -29,6 +33,7 @@ Take Profit: <code>{s['tp']}</code>
 RR: {s.get('rr', 2.0)}
 """.strip()
 
+
 def format_closed(t):
     icon = {"TP": "✅ HIT TP", "SL": "❌ HIT SL"}.get(t["status"], "⏱ EXPIRED")
     return f"""
@@ -42,6 +47,7 @@ Entry: <code>{t['entry']}</code> → Exit: <code>{t['exit']}</code>
 Result: <b>{t['r_multiple']:+.2f}R</b>
 Duration: {t['duration_hours']}h
 """.strip()
+
 
 def format_daily(alert_stats, trade_stats):
     lines = ["📊 <b>DAILY SUMMARY</b>", "", f"Alerts: {alert_stats.get('total', 0)}"]
@@ -58,6 +64,7 @@ def format_daily(alert_stats, trade_stats):
         lines.append("No closes in 24h")
     lines += ["", f"Open now: {len(load_open())}"]
     return "\n".join(lines)
+
 
 def run_loop():
     print("=== S09 + S19 DUAL ENGINE (self-contained S19) ===", flush=True)
@@ -104,8 +111,7 @@ def run_loop():
                             print(f"ALERT → {s['mode']} {s['direction']}", flush=True)
                             add_open_trade(s)
                             daily["total"] += 1
-                            daily["by_market"][s["market"]] = \
-                                daily["by_market"].get(s["market"], 0) + 1
+                            daily["by_market"][s["market"]] = daily["by_market"].get(s["market"], 0) + 1
 
             if utc.hour >= 21 and last_daily != today:
                 send_alert(format_daily(daily, closed_today_stats()))
@@ -117,6 +123,7 @@ def run_loop():
         except Exception as e:
             print("Loop error:", e, flush=True)
             time.sleep(30)
+
 
 if __name__ == "__main__":
     threading.Thread(target=run_loop, daemon=True).start()
