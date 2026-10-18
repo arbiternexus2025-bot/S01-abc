@@ -72,7 +72,7 @@ MODES = [
      "rr": 2.2, "atr_len": 14, "min_imp": 1.3, "body": 0.50, "rng": 0.65, "max_ba": 1.3, "min_z": 0.20,
      "priority": 83},
 
-    # ── S19 HTF (priority 110+) ──
+    # ── S19 HTF ──
     {"id": "S19_USDCHF_H4_STRONG_OB", "strategy": "S19", "book": "S19", "family": "STRONG_OB",
      "market": "USDCHF", "tf": "H4", "preset": "H4_STRONG_OB", "priority": 130},
     {"id": "S19_USDJPY_H4_COMBO_QUAL", "strategy": "S19", "book": "S19", "family": "COMBO_QUAL",
@@ -102,6 +102,7 @@ MODES = [
 FRESH = {"M5": 4, "M15": 3, "M30": 3, "H1": 2, "H4": 2}
 _h4_cache = {}
 
+
 def in_session_s09(name, hour=None):
     if name is None:
         return True
@@ -114,6 +115,7 @@ def in_session_s09(name, hour=None):
         return 12 <= h < 21
     return True
 
+
 def get_bias_s09(market):
     now = datetime.now(timezone.utc).timestamp()
     c = _h4_cache.get(market)
@@ -125,6 +127,7 @@ def get_bias_s09(market):
     b = h4_bias(ohlc["high"], ohlc["low"], ohlc["close"])
     _h4_cache[market] = {"bias": b, "ts": now}
     return b
+
 
 def _stop_still_valid(s, high, low, close):
     n = len(close)
@@ -139,6 +142,7 @@ def _stop_still_valid(s, high, low, close):
             if high[i] >= s.stop:
                 return False
         return close[-1] < s.stop
+
 
 def run_s09(mode, ohlc):
     high, low, open_, close = ohlc["high"], ohlc["low"], ohlc["open"], ohlc["close"]
@@ -175,14 +179,22 @@ def run_s09(mode, ohlc):
         return None, "stop_hit"
     return {
         "direction": "LONG" if s.direction == 1 else "SHORT",
-        "mode": mode["id"], "strategy": "S09", "book": mode.get("book", ""),
-        "market": mode["market"], "tf": mode["tf"],
+        "mode": mode["id"],
+        "strategy": "S09",
+        "book": mode.get("book", ""),
+        "market": mode["market"],
+        "tf": mode["tf"],
         "entry": round(float(s.entry_price), 5),
-        "sl": round(float(s.stop), 5), "tp": round(float(s.target), 5),
-        "family": mode["family"], "priority": mode["priority"],
-        "risk": abs(float(s.entry_price) - float(s.stop)), "rr": mode["rr"],
-        "bars_ago": bars_ago, "bias": bias,
+        "sl": round(float(s.stop), 5),
+        "tp": round(float(s.target), 5),
+        "family": mode["family"],
+        "priority": mode["priority"],
+        "risk": abs(float(s.entry_price) - float(s.stop)),
+        "rr": mode["rr"],
+        "bars_ago": bars_ago,
+        "bias": bias,
     }, "ok"
+
 
 def run_s19(mode, ohlc):
     high, low, open_, close = ohlc["high"], ohlc["low"], ohlc["open"], ohlc["close"]
@@ -201,21 +213,31 @@ def run_s19(mode, ohlc):
         return None, "stop_hit"
     return {
         "direction": "LONG" if s.direction == 1 else "SHORT",
-        "mode": mode["id"], "strategy": "S19", "book": "S19",
-        "market": mode["market"], "tf": mode["tf"],
+        "mode": mode["id"],
+        "strategy": "S19",
+        "book": "S19",
+        "market": mode["market"],
+        "tf": mode["tf"],
         "entry": round(float(s.entry_price), 5),
-        "sl": round(float(s.stop), 5), "tp": round(float(s.target), 5),
-        "family": mode["family"], "priority": mode["priority"],
-        "risk": abs(float(s.entry_price) - float(s.stop)), "rr": s.rr,
-        "bars_ago": bars_ago, "bias": getattr(s, "bias", None),
+        "sl": round(float(s.stop), 5),
+        "tp": round(float(s.target), 5),
+        "family": mode["family"],
+        "priority": mode["priority"],
+        "risk": abs(float(s.entry_price) - float(s.stop)),
+        "rr": s.rr,
+        "bars_ago": bars_ago,
+        "bias": getattr(s, "bias", None),
         "poi_type": getattr(s, "poi_type", "OB"),
     }, "ok"
+
 
 def check_modes(modes, get_ohlc_func):
     results = []
     stats = {}
+
     def bump(k):
         stats[k] = stats.get(k, 0) + 1
+
     for mode in modes:
         print(f"  → {mode['id']}", flush=True)
         ohlc = get_ohlc_func(mode["market"], mode["tf"])
@@ -237,7 +259,7 @@ def check_modes(modes, get_ohlc_func):
             print(
                 f"     [SIGNAL] {sig['strategy']} {sig['direction']} @ {sig['entry']} "
                 f"SL={sig['sl']} TP={sig['tp']} RR={sig['rr']} bars_ago={sig['bars_ago']}",
-                flush=True
+                flush=True,
             )
             results.append(sig)
         except Exception as e:
@@ -245,6 +267,7 @@ def check_modes(modes, get_ohlc_func):
             print(f"     [error] {e}", flush=True)
     print("  == " + " ".join(f"{k}={v}" for k, v in sorted(stats.items())), flush=True)
     return results
+
 
 def select_highest_modes(signals):
     if not signals:
