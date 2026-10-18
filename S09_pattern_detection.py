@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""S09 detector — per-mode geometry params from promote list"""
+"""S09 live detector — per-mode geometry (wick / age / close / rr / atr / impulse)"""
 
 from __future__ import annotations
 import numpy as np
@@ -35,9 +35,9 @@ def compute_atr(high, low, close, length=14):
     atr = np.full(n, np.nan)
     if n < length:
         return atr
-    atr[length - 1] = np.mean(tr[:length])
+    atr[length-1] = np.mean(tr[:length])
     for i in range(length, n):
-        atr[i] = (atr[i - 1] * (length - 1) + tr[i]) / length
+        atr[i] = (atr[i-1] * (length-1) + tr[i]) / length
     return atr
 
 def compute_ema(close, length):
@@ -45,10 +45,10 @@ def compute_ema(close, length):
     ema = np.full(n, np.nan)
     if n < length:
         return ema
-    ema[length - 1] = np.mean(close[:length])
+    ema[length-1] = np.mean(close[:length])
     k = 2.0 / (length + 1)
     for i in range(length, n):
-        ema[i] = close[i] * k + ema[i - 1] * (1 - k)
+        ema[i] = close[i] * k + ema[i-1] * (1 - k)
     return ema
 
 def h4_bias(high, low, close):
@@ -59,15 +59,13 @@ def h4_bias(high, low, close):
     i = len(close) - 1
     if np.isnan(ema20[i]) or np.isnan(ema50[i]):
         return 0
-    h1 = float(np.max(high[i - 7:i + 1]))
-    h0 = float(np.max(high[i - 15:i - 7]))
-    l1 = float(np.min(low[i - 7:i + 1]))
-    l0 = float(np.min(low[i - 15:i - 7]))
-    bull_struct = (h1 > h0) or (l1 > l0)
-    bear_struct = (l1 < l0) or (h1 < h0)
-    if ema20[i] > ema50[i] and close[i] > ema50[i] and bull_struct:
+    h1 = float(np.max(high[i-7:i+1])); h0 = float(np.max(high[i-15:i-7]))
+    l1 = float(np.min(low[i-7:i+1]));  l0 = float(np.min(low[i-15:i-7]))
+    bull = (h1 > h0) or (l1 > l0)
+    bear = (l1 < l0) or (h1 < h0)
+    if ema20[i] > ema50[i] and close[i] > ema50[i] and bull:
         return 1
-    if ema20[i] < ema50[i] and close[i] < ema50[i] and bear_struct:
+    if ema20[i] < ema50[i] and close[i] < ema50[i] and bear:
         return -1
     return 0
 
@@ -87,18 +85,18 @@ def detect_sd_zones(high, low, open_, close, atr,
         body_up = close[i] - open_[i]
         body_dn = open_[i] - close[i]
 
-        if body_up >= body_mult * a and rng >= range_mult * a and close[i] > high[i - 1]:
+        if body_up >= body_mult * a and rng >= range_mult * a and close[i] > high[i-1]:
             found = False
             for bl in range(min_base_bars, max_base_bars + 1):
                 bs = i - bl
                 if bs < 5:
                     break
                 be = i - 1
-                b_high = float(np.max(high[bs:be + 1]))
-                b_low = float(np.min(low[bs:be + 1]))
+                b_high = float(np.max(high[bs:be+1]))
+                b_low  = float(np.min(low[bs:be+1]))
                 if (b_high - b_low) > max_base_atr * a:
                     continue
-                prox = float(np.max(np.maximum(open_[bs:be + 1], close[bs:be + 1])))
+                prox = float(np.max(np.maximum(open_[bs:be+1], close[bs:be+1])))
                 dist = b_low
                 if prox <= dist:
                     continue
@@ -115,18 +113,18 @@ def detect_sd_zones(high, low, open_, close, atr,
                 i += 1
             continue
 
-        if body_dn >= body_mult * a and rng >= range_mult * a and close[i] < low[i - 1]:
+        if body_dn >= body_mult * a and rng >= range_mult * a and close[i] < low[i-1]:
             found = False
             for bl in range(min_base_bars, max_base_bars + 1):
                 bs = i - bl
                 if bs < 5:
                     break
                 be = i - 1
-                b_high = float(np.max(high[bs:be + 1]))
-                b_low = float(np.min(low[bs:be + 1]))
+                b_high = float(np.max(high[bs:be+1]))
+                b_low  = float(np.min(low[bs:be+1]))
                 if (b_high - b_low) > max_base_atr * a:
                     continue
-                prox = float(np.min(np.minimum(open_[bs:be + 1], close[bs:be + 1])))
+                prox = float(np.min(np.minimum(open_[bs:be+1], close[bs:be+1])))
                 dist = b_high
                 if prox >= dist:
                     continue
@@ -151,7 +149,6 @@ def generate_signals(high, low, open_, close, atr, zones,
     signals = []
     seen = set()
     last_exit = -1
-
     for z in sorted(zones, key=lambda x: x.created_bar):
         if z.created_bar in seen:
             continue
@@ -160,12 +157,10 @@ def generate_signals(high, low, open_, close, atr, zones,
                 continue
             if not (low[j] <= z.proximal <= high[j]):
                 continue
-
             seen.add(z.created_bar)
             a = atr[j]
             if np.isnan(a) or a < 1e-9:
                 break
-
             if z.direction == 1:
                 wick = min(open_[j], close[j]) - low[j]
                 if wick < wick_mult * a:
@@ -176,18 +171,15 @@ def generate_signals(high, low, open_, close, atr, zones,
                 if wick < wick_mult * a:
                     break
                 wick_val = wick / a
-
             if require_close:
                 if z.direction == 1 and close[j] < open_[j]:
                     break
                 if z.direction == -1 and close[j] > open_[j]:
                     break
-
             entry = z.proximal
             risk = abs(entry - z.distal)
             if risk < 0.20 * a or risk > 4.0 * a:
                 break
-
             target = entry + z.direction * risk * rr
             signals.append(SDSignal(
                 z.direction, j, entry, z.distal, target, risk,
