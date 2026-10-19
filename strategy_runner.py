@@ -1,14 +1,18 @@
 from datetime import datetime, timezone
 from data_feed import get_ohlc
 from S09_pattern_detection import detect_s09, h4_bias
-from S19_pattern_detection import detect_s19_signals, PRESETS
+from S19_pattern_detection import (
+    detect_s19_signals,
+    detect_mtf_with_preset,
+    PRESETS,
+)
 
 # ============================================================
-# S09 Deployment Book + S19 Champion Modes
+# S09 Deployment Book (UNCHANGED) + S19 new ranked list
 # ============================================================
 
 MODES = [
-    # ── S09 MAIN SESSION ──
+    # ========== S09 MAIN SESSION (unchanged) ==========
     {"id": "Sess_JPY_M30_W050_Active_BaseLoose", "strategy": "S09", "book": "Main", "family": "Session",
      "market": "USDJPY", "tf": "M30", "wick": 0.50, "age": 120, "session": "Active", "close": False,
      "rr": 2.0, "atr_len": 14, "min_imp": 1.3, "body": 0.50, "rng": 0.65, "max_ba": 1.5, "min_z": 0.15,
@@ -34,7 +38,7 @@ MODES = [
      "rr": 2.0, "atr_len": 14, "min_imp": 1.3, "body": 0.50, "rng": 0.65, "max_ba": 1.3, "min_z": 0.20,
      "priority": 80},
 
-    # ── S09 SATELLITE CLOSE ──
+    # ========== S09 SATELLITE CLOSE (unchanged) ==========
     {"id": "Close_EUR_M15_W050_RR25", "strategy": "S09", "book": "Satellite", "family": "Close",
      "market": "EURUSD", "tf": "M15", "wick": 0.50, "age": 150, "session": None, "close": True,
      "rr": 2.5, "atr_len": 14, "min_imp": 1.3, "body": 0.50, "rng": 0.65, "max_ba": 1.3, "min_z": 0.20,
@@ -72,31 +76,38 @@ MODES = [
      "rr": 2.2, "atr_len": 14, "min_imp": 1.3, "body": 0.50, "rng": 0.65, "max_ba": 1.3, "min_z": 0.20,
      "priority": 83},
 
-    # ── S19 HTF ──
+    # ========== S19 NEW RANKED LIST (from agent screenshot) ==========
+    # 1–4 H4 single-TF
     {"id": "S19_USDCHF_H4_STRONG_OB", "strategy": "S19", "book": "S19", "family": "STRONG_OB",
-     "market": "USDCHF", "tf": "H4", "preset": "H4_STRONG_OB", "priority": 130},
+     "market": "USDCHF", "tf": "H4", "preset": "H4_STRONG_OB", "priority": 140},
     {"id": "S19_USDJPY_H4_COMBO_QUAL", "strategy": "S19", "book": "S19", "family": "COMBO_QUAL",
-     "market": "USDJPY", "tf": "H4", "preset": "H4_QUALITY", "priority": 128},
+     "market": "USDJPY", "tf": "H4", "preset": "H4_QUALITY", "priority": 138},
     {"id": "S19_EURUSD_H4_COMBO_QUAL", "strategy": "S19", "book": "S19", "family": "COMBO_QUAL",
-     "market": "EURUSD", "tf": "H4", "preset": "H4_QUALITY", "priority": 126},
+     "market": "EURUSD", "tf": "H4", "preset": "H4_QUALITY", "priority": 136},
     {"id": "S19_XAUUSD_H4_BEST_STACK", "strategy": "S19", "book": "S19", "family": "BEST_STACK",
-     "market": "XAUUSD", "tf": "H4", "preset": "H4_QUALITY", "priority": 124},
-    {"id": "S19_USDJPY_M30_STRONG_OB", "strategy": "S19", "book": "S19", "family": "STRONG_OB",
-     "market": "USDJPY", "tf": "M30", "preset": "M30_STRONG_OB", "priority": 122},
-    {"id": "S19_EURUSD_M30_STRONG_OB", "strategy": "S19", "book": "S19", "family": "STRONG_OB",
-     "market": "EURUSD", "tf": "M30", "preset": "M30_STRONG_OB", "priority": 120},
-    {"id": "S19_EURUSD_H1_STRONG_OB", "strategy": "S19", "book": "S19", "family": "STRONG_OB",
-     "market": "EURUSD", "tf": "H1", "preset": "H1_STRONG_OB", "priority": 118},
-    {"id": "S19_GBPUSD_H1_STRONG_OB", "strategy": "S19", "book": "S19", "family": "STRONG_OB",
-     "market": "GBPUSD", "tf": "H1", "preset": "H1_STRONG_OB", "priority": 116},
-    {"id": "S19_XAUUSD_H1_STRONG_OB", "strategy": "S19", "book": "S19", "family": "STRONG_OB",
-     "market": "XAUUSD", "tf": "H1", "preset": "H1_STRONG_OB", "priority": 114},
+     "market": "XAUUSD", "tf": "H4", "preset": "H4_QUALITY", "priority": 134},
 
-    # ── S19 M5 SCALP ──
-    {"id": "S19_USDJPY_M5_VOL40_p5", "strategy": "S19", "book": "S19", "family": "SCALP",
-     "market": "USDJPY", "tf": "M5", "preset": "M5_VOL40_P5", "priority": 112},
-    {"id": "S19_XAUUSD_M5_COMBO_p3", "strategy": "S19", "book": "S19", "family": "SCALP",
-     "market": "XAUUSD", "tf": "M5", "preset": "M5_COMBO_P3", "priority": 110},
+    # 5,6,8,9,10,11 MTF (H4 context → H1 entry)
+    {"id": "S19_USDCHF_MTF_STRONG", "strategy": "S19_MTF", "book": "S19", "family": "MTF_STRONG",
+     "market": "USDCHF", "tf": "H1", "preset": "MTF_STRONG", "priority": 132},
+    {"id": "S19_XAUUSD_MTF_STRONG", "strategy": "S19_MTF", "book": "S19", "family": "MTF_STRONG",
+     "market": "XAUUSD", "tf": "H1", "preset": "MTF_STRONG", "priority": 130},
+    {"id": "S19_EURUSD_MTF_STRONG", "strategy": "S19_MTF", "book": "S19", "family": "MTF_STRONG",
+     "market": "EURUSD", "tf": "H1", "preset": "MTF_STRONG", "priority": 128},
+    {"id": "S19_GBPUSD_MTF_PCT50", "strategy": "S19_MTF", "book": "S19", "family": "MTF_PCT50",
+     "market": "GBPUSD", "tf": "H1", "preset": "MTF_PCT50", "priority": 126},
+    {"id": "S19_USDJPY_MTF_STRONG", "strategy": "S19_MTF", "book": "S19", "family": "MTF_STRONG",
+     "market": "USDJPY", "tf": "H1", "preset": "MTF_STRONG", "priority": 124},
+    {"id": "S19_XAUUSD_MTF_PCT50", "strategy": "S19_MTF", "book": "S19", "family": "MTF_PCT50",
+     "market": "XAUUSD", "tf": "H1", "preset": "MTF_PCT50", "priority": 122},
+
+    # 7 + 12 USDJPY M30 + EURUSD M30/H1 STRONG_OB
+    {"id": "S19_USDJPY_M30_STRONG_OB", "strategy": "S19", "book": "S19", "family": "STRONG_OB",
+     "market": "USDJPY", "tf": "M30", "preset": "M30_STRONG_OB", "priority": 120},
+    {"id": "S19_EURUSD_M30_STRONG_OB", "strategy": "S19", "book": "S19", "family": "STRONG_OB",
+     "market": "EURUSD", "tf": "M30", "preset": "M30_STRONG_OB", "priority": 118},
+    {"id": "S19_EURUSD_H1_STRONG_OB", "strategy": "S19", "book": "S19", "family": "STRONG_OB",
+     "market": "EURUSD", "tf": "H1", "preset": "H1_STRONG_OB", "priority": 116},
 ]
 
 FRESH = {"M5": 4, "M15": 3, "M30": 3, "H1": 2, "H4": 2}
@@ -197,10 +208,13 @@ def run_s09(mode, ohlc):
 
 
 def run_s19(mode, ohlc):
+    """Single-TF S19 (H4 / H1 / M30 presets)."""
     high, low, open_, close = ohlc["high"], ohlc["low"], ohlc["open"], ohlc["close"]
     times = ohlc.get("time")
     n = len(close)
     preset_name = mode.get("preset", "H1_STRONG_OB")
+    if preset_name not in PRESETS:
+        return None, f"bad_preset({preset_name})"
     params = dict(PRESETS[preset_name])
     signals = detect_s19_signals(high, low, open_, close, times=times, **params)
     if not signals:
@@ -231,6 +245,59 @@ def run_s19(mode, ohlc):
     }, "ok"
 
 
+def run_s19_mtf(mode):
+    """Multi-TF S19: H4 context → H1 entry."""
+    market = mode["market"]
+    ohlc4 = get_ohlc(market, "H4", limit=150)
+    ohlc1 = get_ohlc(market, "H1", limit=300)
+    if ohlc4 is None or ohlc1 is None:
+        return None, "no_data"
+    if "open" not in ohlc1:
+        ohlc1["open"] = ohlc1["close"]
+    if len(ohlc1["close"]) < 80 or len(ohlc4["close"]) < 50:
+        return None, "no_data"
+
+    preset_name = mode.get("preset", "MTF_STRONG")
+    try:
+        signals = detect_mtf_with_preset(
+            ohlc4["high"], ohlc4["low"], ohlc4["close"], ohlc4["time"],
+            ohlc1["high"], ohlc1["low"], ohlc1["open"], ohlc1["close"], ohlc1["time"],
+            preset=preset_name,
+        )
+    except Exception as e:
+        return None, f"mtf_error({e})"
+
+    if not signals:
+        return None, "no_signal"
+
+    s = signals[-1]
+    n = len(ohlc1["close"])
+    bars_ago = n - 1 - s.entry_bar
+    if bars_ago > FRESH.get("H1", 2):
+        return None, f"expired_or_old (bars_ago={bars_ago})"
+    if not _stop_still_valid(s, ohlc1["high"], ohlc1["low"], ohlc1["close"]):
+        return None, "stop_hit"
+
+    return {
+        "direction": "LONG" if s.direction == 1 else "SHORT",
+        "mode": mode["id"],
+        "strategy": "S19",
+        "book": "S19",
+        "market": market,
+        "tf": "H1",
+        "entry": round(float(s.entry_price), 5),
+        "sl": round(float(s.stop), 5),
+        "tp": round(float(s.target), 5),
+        "family": mode["family"],
+        "priority": mode["priority"],
+        "risk": abs(float(s.entry_price) - float(s.stop)),
+        "rr": s.rr,
+        "bars_ago": bars_ago,
+        "bias": getattr(s, "bias", None),
+        "poi_type": getattr(s, "poi_type", "OB"),
+    }, "ok"
+
+
 def check_modes(modes, get_ohlc_func):
     results = []
     stats = {}
@@ -240,18 +307,29 @@ def check_modes(modes, get_ohlc_func):
 
     for mode in modes:
         print(f"  → {mode['id']}", flush=True)
-        ohlc = get_ohlc_func(mode["market"], mode["tf"])
-        if ohlc is None or len(ohlc["close"]) < 80:
-            print("     [no_data]", flush=True)
-            bump("no_data")
-            continue
         try:
-            if "open" not in ohlc:
-                ohlc["open"] = ohlc["close"]
-            if mode.get("strategy") == "S19":
+            strat = mode.get("strategy")
+            if strat == "S19_MTF":
+                sig, reason = run_s19_mtf(mode)
+            elif strat == "S19":
+                ohlc = get_ohlc_func(mode["market"], mode["tf"])
+                if ohlc is None or len(ohlc["close"]) < 80:
+                    print("     [no_data]", flush=True)
+                    bump("no_data")
+                    continue
+                if "open" not in ohlc:
+                    ohlc["open"] = ohlc["close"]
                 sig, reason = run_s19(mode, ohlc)
             else:
+                ohlc = get_ohlc_func(mode["market"], mode["tf"])
+                if ohlc is None or len(ohlc["close"]) < 80:
+                    print("     [no_data]", flush=True)
+                    bump("no_data")
+                    continue
+                if "open" not in ohlc:
+                    ohlc["open"] = ohlc["close"]
                 sig, reason = run_s09(mode, ohlc)
+
             bump(reason.split()[0] if reason else "other")
             if sig is None:
                 print(f"     [{reason}]", flush=True)
@@ -265,6 +343,7 @@ def check_modes(modes, get_ohlc_func):
         except Exception as e:
             bump("error")
             print(f"     [error] {e}", flush=True)
+
     print("  == " + " ".join(f"{k}={v}" for k, v in sorted(stats.items())), flush=True)
     return results
 
