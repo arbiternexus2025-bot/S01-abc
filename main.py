@@ -67,13 +67,13 @@ def format_daily(alert_stats, trade_stats):
 
 
 def run_loop():
-    print("=== S09 + S19 DUAL ENGINE (self-contained S19) ===", flush=True)
+    print("=== S09 + S19 DUAL ENGINE (MTF enabled) ===", flush=True)
     s09 = [m for m in MODES if m.get("strategy") == "S09"]
-    s19 = [m for m in MODES if m.get("strategy") == "S19"]
+    s19 = [m for m in MODES if m.get("strategy") in ("S19", "S19_MTF")]
     print(f"S09: {len(s09)} | S19: {len(s19)} | Total: {len(MODES)}", flush=True)
     for m in MODES:
         extra = f" preset={m['preset']}" if m.get("preset") else ""
-        print(f"  [{m.get('strategy'):3}] {m['id']}{extra}", flush=True)
+        print(f"  [{m.get('strategy'):7}] {m['id']}{extra}", flush=True)
     print("-" * 60, flush=True)
 
     last_alert = {}
