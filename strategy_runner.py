@@ -108,6 +108,12 @@ MODES = [
      "market": "EURUSD", "tf": "M30", "preset": "M30_STRONG_OB", "priority": 118},
     {"id": "S19_EURUSD_H1_STRONG_OB", "strategy": "S19", "book": "S19", "family": "STRONG_OB",
      "market": "EURUSD", "tf": "H1", "preset": "H1_STRONG_OB", "priority": 116},
+
+    # S19 M5 SCALP (restored)
+    {"id": "S19_USDJPY_M5_VOL40_p5", "strategy": "S19", "book": "S19", "family": "SCALP",
+     "market": "USDJPY", "tf": "M5", "preset": "M5_VOL40_P5", "priority": 112},
+    {"id": "S19_XAUUSD_M5_COMBO_p3", "strategy": "S19", "book": "S19", "family": "SCALP",
+     "market": "XAUUSD", "tf": "M5", "preset": "M5_COMBO_P3", "priority": 110},
 ]
 
 FRESH = {"M5": 4, "M15": 3, "M30": 3, "H1": 2, "H4": 2}
