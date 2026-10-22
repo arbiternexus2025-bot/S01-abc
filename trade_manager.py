@@ -1,3 +1,4 @@
+"""APEX-19 trade tracker — open / SL / TP / expire with timestamp exits."""
 import json
 import os
 import time
@@ -38,15 +39,17 @@ def append_closed(trade):
     _save(CLOSED_FILE, closed)
 
 
-def add_open_trade(sig):
+def add_open_trade(sig) -> bool:
     trades = load_open()
     for t in trades:
         if t["market"] == sig["market"]:
-            print(f"  [TRACK] Already open on {sig['market']} → skip", flush=True)
+            print(f"  [TRACK] Already open on {sig['market']} → skip new", flush=True)
             return False
     trade = {
         "id": f"{sig['market']}_{sig['direction']}_{sig['entry']}_{int(time.time())}",
         "mode": sig["mode"],
+        "rank": sig.get("rank"),
+        "grade": sig.get("grade"),
         "market": sig["market"],
         "tf": sig["tf"],
         "direction": sig["direction"],
@@ -54,13 +57,14 @@ def add_open_trade(sig):
         "sl": sig["sl"],
         "tp": sig["tp"],
         "risk": sig.get("risk", abs(sig["entry"] - sig["sl"])),
+        "rr": sig.get("rr", 2.5),
         "status": "OPEN",
         "opened_at": datetime.now(timezone.utc).isoformat(),
         "opened_ts": time.time(),
     }
     trades.append(trade)
     save_open(trades)
-    print(f"  [TRACK] OPENED {trade['id']}", flush=True)
+    print(f"  [TRACK] OPENED {trade['id']} grade={trade.get('grade')}", flush=True)
     return True
 
 
@@ -69,7 +73,7 @@ def check_open_trades():
     still_open = []
     newly = []
     for t in trades:
-        age_h = (time.time() - t["opened_ts"]) / 3600
+        age_h = (time.time() - t["opened_ts"]) / 3600.0
         if age_h >= MAX_AGE_HOURS:
             ohlc = get_ohlc(t["market"], t["tf"], limit=50)
             exit_px = float(ohlc["close"][-1]) if ohlc is not None else t["entry"]
@@ -113,10 +117,11 @@ def check_open_trades():
                     break
         if hit:
             risk = t["risk"] if t["risk"] > 1e-9 else 1e-9
-            r = -1.0 if hit == "SL" else (
-                ((exit_px - t["entry"]) if t["direction"] == "LONG" else (t["entry"] - exit_px)) / risk
-            )
-            dur = (exit_ts - t["opened_ts"]) / 3600 if exit_ts else age_h
+            if hit == "SL":
+                r = -1.0
+            else:
+                r = ((exit_px - t["entry"]) if t["direction"] == "LONG" else (t["entry"] - exit_px)) / risk
+            dur = (exit_ts - t["opened_ts"]) / 3600.0 if exit_ts else age_h
             closed = dict(t)
             closed.update(
                 status=hit,
