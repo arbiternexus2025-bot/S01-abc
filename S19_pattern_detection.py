@@ -653,7 +653,216 @@ PRESETS: Dict[str, dict] = {
         session="ALL", vol_min_pct=0.40, max_poi_age=48,
         sl_buffer_atr=0.15, allow_fvg_fallback=True, bias_mode="EMA50_st15",
     ),
+
+    # ══════════════════════════════════════════════════════════
+    # LOCKED PORTFOLIO PRESETS (Balanced RR 5–8R research)
+    # Tier 1 / 2 / 3 — use these names in the alert bot
+    # ══════════════════════════════════════════════════════════
+
+    # Tier 1 — Primary Core
+    "H1_STRONG_st15_rr8": dict(
+        pivot_left=5, pivot_right=5, rr=8.0, min_disp_atr=0.90,
+        ob_min_body=0.55, bos_body_min=0.40, bos_mode="PCT50",
+        session="ALL", vol_min_pct=0.0, max_poi_age=36,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_st15",
+    ),
+    "M30_STRONG_st10_rr8": dict(
+        pivot_left=5, pivot_right=5, rr=8.0, min_disp_atr=0.85,
+        ob_min_body=0.50, bos_body_min=0.35, bos_mode="PCT50",
+        session="ALL", vol_min_pct=0.0, max_poi_age=40,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_st10",
+    ),
+    "H4_QUALITY_st10_rr8": dict(
+        pivot_left=5, pivot_right=5, rr=8.0, min_disp_atr=0.95,
+        ob_min_body=0.55, bos_body_min=0.40, bos_mode="PCT50",
+        session="LONDON_NY", vol_min_pct=0.25, max_poi_age=28,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_st10",
+    ),
+    "H4_STRONG_OB_rr7": dict(
+        pivot_left=5, pivot_right=5, rr=7.0, min_disp_atr=0.90,
+        ob_min_body=0.55, bos_body_min=0.40, bos_mode="PCT50",
+        session="ALL", vol_min_pct=0.0, max_poi_age=28,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_s2",
+    ),
+
+    # Tier 2 — Core Expansion
+    "H1_STRONG_st10_rr8": dict(
+        pivot_left=5, pivot_right=5, rr=8.0, min_disp_atr=0.90,
+        ob_min_body=0.55, bos_body_min=0.40, bos_mode="PCT50",
+        session="ALL", vol_min_pct=0.0, max_poi_age=36,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_st10",
+    ),
+    "H4_QUALITY_rr6": dict(
+        pivot_left=5, pivot_right=5, rr=6.0, min_disp_atr=0.95,
+        ob_min_body=0.55, bos_body_min=0.40, bos_mode="PCT50",
+        session="LONDON_NY", vol_min_pct=0.25, max_poi_age=28,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_s2",
+    ),
+    "M30_STRONG_st15_rr8": dict(
+        pivot_left=5, pivot_right=5, rr=8.0, min_disp_atr=0.85,
+        ob_min_body=0.50, bos_body_min=0.35, bos_mode="PCT50",
+        session="ALL", vol_min_pct=0.0, max_poi_age=40,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_st15",
+    ),
+    "M30_STRONG_st15_rr6": dict(
+        pivot_left=5, pivot_right=5, rr=6.0, min_disp_atr=0.85,
+        ob_min_body=0.50, bos_body_min=0.35, bos_mode="PCT50",
+        session="ALL", vol_min_pct=0.0, max_poi_age=40,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_st15",
+    ),
+
+    # Tier 3 — Satellites
+    "M5_VOL40_st15_rr8": dict(
+        pivot_left=5, pivot_right=5, rr=8.0, min_disp_atr=0.80,
+        ob_min_body=0.50, bos_body_min=0.35, bos_mode="PCT50",
+        session="ALL", vol_min_pct=0.40, max_poi_age=48,
+        sl_buffer_atr=0.15, allow_fvg_fallback=True, bias_mode="EMA50_st15",
+    ),
+    "M5_COMBO_st15_rr7": dict(
+        pivot_left=3, pivot_right=3, rr=7.0, min_disp_atr=0.70,
+        ob_min_body=0.45, bos_body_min=0.30, bos_mode="PCT50",
+        session="LONDON_NY", vol_min_pct=0.15, max_poi_age=48,
+        sl_buffer_atr=0.15, allow_fvg_fallback=True, bias_mode="EMA50_st15",
+    ),
+    "H1_DUAL_rr8": dict(
+        pivot_left=5, pivot_right=5, rr=8.0, min_disp_atr=0.90,
+        ob_min_body=0.55, bos_body_min=0.40, bos_mode="PCT50",
+        session="ALL", vol_min_pct=0.0, max_poi_age=36,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="DUAL_50_200",
+    ),
+    "H1_COMBO_st10_rr8": dict(
+        pivot_left=5, pivot_right=5, rr=8.0, min_disp_atr=0.90,
+        ob_min_body=0.50, bos_body_min=0.40, bos_mode="PCT50",
+        session="LONDON_NY", vol_min_pct=0.20, max_poi_age=36,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_st10",
+    ),
 }
+
+
+# ─────────────────────────────────────────────────────────────
+# LOCKED CORE PORTFOLIO (bot routing)
+# ─────────────────────────────────────────────────────────────
+# Each entry: preset name → (recommended symbol, TF, tier, role)
+PORTFOLIO_CORE: Dict[str, dict] = {
+    # Tier 1 — Primary Core (must-run)
+    "H1_STRONG_st15_rr8": {
+        "tier": 1, "symbol": "USDJPY", "tf": "H1",
+        "role": "Flagship", "rr": 8.0,
+        "metrics": {"N": 62, "WR": 71.0, "ExpR": 5.23, "OOS": 6.50, "MaxDD": 5.6},
+    },
+    "M30_STRONG_st10_rr8": {
+        "tier": 1, "symbol": "USDJPY", "tf": "M30",
+        "role": "Frequency + quality", "rr": 8.0,
+        "metrics": {"N": 101, "WR": 67.0, "ExpR": 4.81, "OOS": 3.89, "MaxDD": 4.6},
+    },
+    "H4_QUALITY_st10_rr8": {
+        "tier": 1, "symbol": "EURUSD", "tf": "H4",
+        "role": "Best H4 EUR", "rr": 8.0,
+        "metrics": {"N": 24, "WR": 71.0, "ExpR": 4.75, "OOS": 6.78, "MaxDD": 3.3},
+    },
+    "H4_STRONG_OB_rr7": {
+        "tier": 1, "symbol": "USDCHF", "tf": "H4",
+        "role": "Lowest-DD H4", "rr": 7.0,
+        "metrics": {"N": 30, "WR": 70.0, "ExpR": 4.50, "OOS": 5.67, "MaxDD": 2.2},
+    },
+    # Tier 2 — Core Expansion
+    "H1_STRONG_st10_rr8": {
+        "tier": 2, "symbol": "USDJPY", "tf": "H1",
+        "role": "More JPY H1 trades", "rr": 8.0,
+        "metrics": {"N": 85, "WR": 62.0, "ExpR": 4.39, "OOS": 4.88, "MaxDD": 4.5},
+    },
+    "H1_STRONG_st15_rr8_CHF": {
+        "tier": 2, "symbol": "USDCHF", "tf": "H1",
+        "preset": "H1_STRONG_st15_rr8",  # same params, different symbol
+        "role": "CHF H1 complement", "rr": 8.0,
+        "metrics": {"N": 84, "WR": 63.0, "ExpR": 4.36, "OOS": 4.31, "MaxDD": 3.4},
+    },
+    "H1_STRONG_st15_rr8_GBP": {
+        "tier": 2, "symbol": "GBPUSD", "tf": "H1",
+        "preset": "H1_STRONG_st15_rr8",
+        "role": "GBP diversification", "rr": 8.0,
+        "metrics": {"N": 103, "WR": 59.0, "ExpR": 4.08, "OOS": 4.91, "MaxDD": 5.0},
+    },
+    "M30_STRONG_st15_rr8": {
+        "tier": 2, "symbol": "EURUSD", "tf": "M30",
+        "role": "EUR frequency", "rr": 8.0,
+        "metrics": {"N": 121, "WR": 58.0, "ExpR": 3.88, "OOS": 5.50, "MaxDD": 5.8},
+    },
+    "H4_QUALITY_rr6": {
+        "tier": 2, "symbol": "USDJPY", "tf": "H4",
+        "role": "High-WR H4 JPY", "rr": 6.0,
+        "metrics": {"N": 30, "WR": 77.0, "ExpR": 4.27, "OOS": 3.99, "MaxDD": 2.0},
+    },
+    # Tier 3 — Satellites
+    "M5_VOL40_st15_rr8": {
+        "tier": 3, "symbol": "USDJPY", "tf": "M5",
+        "role": "Scalp — cost sensitive", "rr": 8.0,
+        "metrics": {"N": 41, "WR": 66.0, "ExpR": 4.61, "OOS": 6.94, "MaxDD": 3.5},
+    },
+    "M5_COMBO_st15_rr7": {
+        "tier": 3, "symbol": "USDCHF", "tf": "M5",
+        "role": "Scalp CHF", "rr": 7.0,
+        "metrics": {"N": 63, "WR": 65.0, "ExpR": 3.86, "OOS": 4.52, "MaxDD": 4.8},
+    },
+    "H1_STRONG_st15_rr8_EUR": {
+        "tier": 3, "symbol": "EURUSD", "tf": "H1",
+        "preset": "H1_STRONG_st15_rr8",
+        "role": "Extra EUR H1", "rr": 8.0,
+        "metrics": {"N": 99, "WR": 60.0, "ExpR": 3.92, "OOS": 3.95, "MaxDD": 4.5},
+    },
+    "M30_STRONG_st15_rr6": {
+        "tier": 3, "symbol": "GBPUSD", "tf": "M30",
+        "role": "GBP M30 prefer 6R", "rr": 6.0,
+        "metrics": {"N": 112, "WR": 65.0, "ExpR": 3.40, "OOS": 3.95, "MaxDD": 3.5},
+    },
+    "H1_DUAL_rr8": {
+        "tier": 3, "symbol": "USDJPY", "tf": "H1",
+        "role": "Alt bias DUAL", "rr": 8.0,
+        "metrics": {"N": 103, "WR": 62.0, "ExpR": 4.10, "OOS": 4.07, "MaxDD": 4.5},
+    },
+    "H1_COMBO_st10_rr8": {
+        "tier": 3, "symbol": "USDJPY", "tf": "H1",
+        "role": "Alt COMBO bias", "rr": 8.0,
+        "metrics": {"N": 84, "WR": 60.0, "ExpR": 4.10, "OOS": 4.19, "MaxDD": 4.5},
+    },
+}
+
+
+def portfolio_presets(tier: int = None) -> List[str]:
+    """Return locked portfolio preset names (optionally filtered by tier)."""
+    out = []
+    for name, meta in PORTFOLIO_CORE.items():
+        if tier is None or meta["tier"] == tier:
+            # actual detect preset may be aliased
+            out.append(meta.get("preset", name))
+    # unique preserve order
+    seen = set()
+    uniq = []
+    for p in out:
+        if p not in seen:
+            seen.add(p)
+            uniq.append(p)
+    return uniq
+
+
+def portfolio_routes(tier: int = None) -> List[dict]:
+    """Return full routing table for the alert bot."""
+    rows = []
+    for name, meta in PORTFOLIO_CORE.items():
+        if tier is not None and meta["tier"] != tier:
+            continue
+        rows.append({
+            "route": name,
+            "preset": meta.get("preset", name),
+            "symbol": meta["symbol"],
+            "tf": meta["tf"],
+            "tier": meta["tier"],
+            "role": meta["role"],
+            "rr": meta["rr"],
+            "metrics": meta.get("metrics", {}),
+        })
+    rows.sort(key=lambda x: (x["tier"], -x["metrics"].get("ExpR", 0)))
+    return rows
 
 
 # Map Top-50 rank → recommended preset name (for bot routing)
@@ -1070,12 +1279,15 @@ if __name__ == "__main__":
     print(f"\nSingle-TF presets ({len(PRESETS)}):")
     for name in sorted(PRESETS):
         bm = PRESETS[name].get("bias_mode", "EMA50_s2")
-        print(f"  • {name:22s}  bias={bm}")
+        rr = PRESETS[name].get("rr", 2.5)
+        print(f"  • {name:26s}  bias={bm:12s}  rr={rr}")
     print(f"\nMTF presets ({len(MTF_PRESETS)}):")
     for name in sorted(MTF_PRESETS):
         print(f"  • {name}")
-    print(f"\nTop-50 rank → preset map: {len(TOP50_PRESETS)} entries")
-    print("\nBot example:")
-    print('  sigs = detect_with_preset(h, l, o, c, times, preset="H1_STRONG_st10")')
+    print(f"\nLocked portfolio routes ({len(PORTFOLIO_CORE)}):")
+    for r in portfolio_routes():
+        print(f"  T{r['tier']}  {r['symbol']:7s} {r['tf']:4s}  {r['preset']:26s}  RR={r['rr']:.0f}  {r['role']}")
+    print("\nBot example (Tier 1 flagship):")
+    print('  sigs = detect_with_preset(h, l, o, c, times, preset="H1_STRONG_st15_rr8")')
     print("  latest = get_latest_signal(sigs)")
-    print('  if latest: print(format_alert(latest, "EURUSD", "H1", "H1_STRONG_st10"))')
+    print('  if latest: print(format_alert(latest, "USDJPY", "H1", "H1_STRONG_st15_rr8"))')
