@@ -1,80 +1,145 @@
 """
-APEX-19 Strategy Runner
-=======================
-S19 Top-50 only. No S09.
+APEX-19 Strategy Runner — Curated Tier Book
+===========================================
+S19 only. Research RR (6–8) applied per mode.
 Detailed reject logging. Tight freshness for earlier alerts.
 Highest-rank wins on duplicate market/direction/entry.
 """
 from __future__ import annotations
-from datetime import datetime, timezone
 from data_feed import get_ohlc
 from S19_pattern_detection import (
-    detect_with_preset,
+    detect_s19_signals,
     detect_mtf_with_preset,
     PRESETS,
     MTF_PRESETS,
 )
 
 # ─────────────────────────────────────────────────────────────
-# APEX-19 Top 50 modes (rank 1 = best)
+# CURATED BOOK (research RR 6–8)
+# Tier 1 = Flagship | Tier 2 = Core | Tier 3 = Satellite
 # priority = 1000 - rank
 # ─────────────────────────────────────────────────────────────
 
 MODES = [
-    # rank, id, strategy, market, tf, preset, grade, ExpR, WR, N, setup, priority
-    {"rank": 1,  "id": "R01_USDCHF_H4_STRONG_OB",     "strategy": "S19",     "market": "USDCHF", "tf": "H4", "preset": "H4_STRONG_OB",    "grade": "S",  "expr": 2.16, "wr": 93.1, "n": 29,  "setup": "H4 STRONG_OB / COMBO_QUAL", "priority": 999},
-    {"rank": 2,  "id": "R02_USDJPY_H4_STRONG_st10",   "strategy": "S19",     "market": "USDJPY", "tf": "H4", "preset": "H4_STRONG_st10",  "grade": "S",  "expr": 2.12, "wr": 91.9, "n": 37,  "setup": "H4 COMBO_QUAL / st10",      "priority": 998},
-    {"rank": 3,  "id": "R03_GBPUSD_H4_QUALITY",       "strategy": "S19",     "market": "GBPUSD", "tf": "H4", "preset": "H4_QUALITY",      "grade": "S",  "expr": 2.14, "wr": 92.6, "n": 27,  "setup": "H4 QUALITY baseline",       "priority": 997},
-    {"rank": 4,  "id": "R04_EURUSD_H1_STRONG_st15",   "strategy": "S19",     "market": "EURUSD", "tf": "H1", "preset": "H1_STRONG_st15",  "grade": "S",  "expr": 2.13, "wr": 93.3, "n": 104, "setup": "H1 STRONG + EMA50_st15",    "priority": 996},
-    {"rank": 5,  "id": "R05_EURUSD_H4_QUALITY",       "strategy": "S19",     "market": "EURUSD", "tf": "H4", "preset": "H4_QUALITY",      "grade": "S",  "expr": 1.91, "wr": 87.9, "n": 33,  "setup": "H4 QUALITY / COMBO_QUAL",   "priority": 995},
-    {"rank": 6,  "id": "R06_USDCHF_H1_STRONG_st15",   "strategy": "S19",     "market": "USDCHF", "tf": "H1", "preset": "H1_STRONG_st15",  "grade": "S",  "expr": 2.06, "wr": 91.2, "n": 91,  "setup": "H1 STRONG + EMA50_st15",    "priority": 994},
-    {"rank": 7,  "id": "R07_USDCHF_M30_STRONG_st15",  "strategy": "S19",     "market": "USDCHF", "tf": "M30","preset": "M30_STRONG_st15", "grade": "S",  "expr": 2.04, "wr": 91.3, "n": 104, "setup": "M30 STRONG + EMA50_st15",   "priority": 993},
-    {"rank": 8,  "id": "R08_EURUSD_H1_STRONG_st10",   "strategy": "S19",     "market": "EURUSD", "tf": "H1", "preset": "H1_STRONG_st10",  "grade": "S",  "expr": 2.02, "wr": 90.2, "n": 143, "setup": "H1 STRONG + EMA50_st10",    "priority": 992},
-    {"rank": 9,  "id": "R09_USDJPY_H1_STRONG_st15",   "strategy": "S19",     "market": "USDJPY", "tf": "H1", "preset": "H1_STRONG_st15",  "grade": "S",  "expr": 2.00, "wr": 89.2, "n": 65,  "setup": "H1 STRONG + EMA50_st15",    "priority": 991},
-    {"rank": 10, "id": "R10_USDJPY_H1_STRONG_st10",   "strategy": "S19",     "market": "USDJPY", "tf": "H1", "preset": "H1_STRONG_st10",  "grade": "S",  "expr": 1.99, "wr": 88.8, "n": 89,  "setup": "H1 STRONG + EMA50_st10",    "priority": 990},
-    {"rank": 11, "id": "R11_USDCHF_H1_STRONG_st10",   "strategy": "S19",     "market": "USDCHF", "tf": "H1", "preset": "H1_STRONG_st10",  "grade": "S",  "expr": 1.99, "wr": 89.0, "n": 146, "setup": "H1 STRONG + EMA50_st10",    "priority": 989},
-    {"rank": 12, "id": "R12_XAUUSD_H4_STRONG_OB",     "strategy": "S19",     "market": "XAUUSD", "tf": "H4", "preset": "H4_STRONG_OB",    "grade": "S",  "expr": 1.69, "wr": 74.0, "n": 23,  "setup": "H4 BEST_STACK / STRONG",    "priority": 988},
-    {"rank": 13, "id": "R13_GBPUSD_M30_STRONG_st15",  "strategy": "S19",     "market": "GBPUSD", "tf": "M30","preset": "M30_STRONG_st15", "grade": "S",  "expr": 1.89, "wr": 87.2, "n": 117, "setup": "M30 STRONG + EMA50_st15",   "priority": 987},
-    {"rank": 14, "id": "R14_EURUSD_M30_STRONG_st15",  "strategy": "S19",     "market": "EURUSD", "tf": "M30","preset": "M30_STRONG_st15", "grade": "S",  "expr": 1.85, "wr": 85.7, "n": 133, "setup": "M30 STRONG + EMA50_st15",   "priority": 986},
-    {"rank": 15, "id": "R15_USDJPY_M30_STRONG_st10",  "strategy": "S19",     "market": "USDJPY", "tf": "M30","preset": "M30_STRONG_st10", "grade": "S",  "expr": 1.85, "wr": 85.6, "n": 104, "setup": "M30 STRONG + EMA50_st10",   "priority": 985},
-    {"rank": 16, "id": "R16_GBPUSD_M30_STRONG_st10",  "strategy": "S19",     "market": "GBPUSD", "tf": "M30","preset": "M30_STRONG_st10", "grade": "S",  "expr": 1.83, "wr": 85.5, "n": 173, "setup": "M30 STRONG + EMA50_st10",   "priority": 984},
-    {"rank": 17, "id": "R17_USDCHF_M30_STRONG_st10",  "strategy": "S19",     "market": "USDCHF", "tf": "M30","preset": "M30_STRONG_st10", "grade": "S",  "expr": 1.86, "wr": 86.2, "n": 160, "setup": "M30 STRONG + EMA50_st10",   "priority": 983},
-    {"rank": 18, "id": "R18_USDCHF_MTF_STRONG",       "strategy": "S19_MTF", "market": "USDCHF", "tf": "H1", "preset": "MTF_STRONG",      "grade": "S",  "expr": 1.61, "wr": 78.2, "n": 78,  "setup": "MTF_STRONG H4→H1",          "priority": 982},
-    {"rank": 19, "id": "R19_XAUUSD_H1_STRONG_st05",   "strategy": "S19",     "market": "XAUUSD", "tf": "H1", "preset": "H1_STRONG_st05",  "grade": "S",  "expr": 1.70, "wr": 82.2, "n": 146, "setup": "H1 STRONG + EMA50_st05",    "priority": 981},
-    {"rank": 20, "id": "R20_XAUUSD_M30_STRONG_OB",    "strategy": "S19",     "market": "XAUUSD", "tf": "M30","preset": "M30_STRONG_OB",   "grade": "S",  "expr": 1.78, "wr": 85.6, "n": 174, "setup": "M30 STRONG baseline",       "priority": 980},
-    {"rank": 21, "id": "R21_XAUUSD_MTF_STRONG",       "strategy": "S19_MTF", "market": "XAUUSD", "tf": "H1", "preset": "MTF_STRONG",      "grade": "S",  "expr": 1.53, "wr": 77.4, "n": 62,  "setup": "MTF_STRONG H4→H1",          "priority": 979},
-    {"rank": 22, "id": "R22_EURUSD_MTF_STRONG",       "strategy": "S19_MTF", "market": "EURUSD", "tf": "H1", "preset": "MTF_STRONG",      "grade": "S",  "expr": 1.49, "wr": 74.7, "n": 83,  "setup": "MTF_STRONG H4→H1",          "priority": 978},
-    {"rank": 23, "id": "R23_GBPUSD_M15_COMBO_st15",   "strategy": "S19",     "market": "GBPUSD", "tf": "M15","preset": "M15_COMBO_st15",  "grade": "A+", "expr": 1.72, "wr": 97.4, "n": 39,  "setup": "M15_COMBO + st15",          "priority": 977},
-    {"rank": 24, "id": "R24_USDCHF_M15_COMBO_st15",   "strategy": "S19",     "market": "USDCHF", "tf": "M15","preset": "M15_COMBO_st15",  "grade": "A+", "expr": 1.68, "wr": 95.8, "n": 48,  "setup": "M15_COMBO + st15",          "priority": 976},
-    {"rank": 25, "id": "R25_USDJPY_M15_COMBO_st05",   "strategy": "S19",     "market": "USDJPY", "tf": "M15","preset": "M15_COMBO_st05",  "grade": "A+", "expr": 1.65, "wr": 94.4, "n": 89,  "setup": "M15_COMBO + st05",          "priority": 975},
-    {"rank": 26, "id": "R26_EURUSD_M15_COMBO_st10",   "strategy": "S19",     "market": "EURUSD", "tf": "M15","preset": "M15_COMBO_st10",  "grade": "A+", "expr": 1.50, "wr": 89.4, "n": 85,  "setup": "M15_COMBO + st10",          "priority": 974},
-    {"rank": 27, "id": "R27_USDCHF_M5_COMBO_st15",    "strategy": "S19",     "market": "USDCHF", "tf": "M5", "preset": "M5_COMBO_st15",   "grade": "A+", "expr": 1.61, "wr": 96.4, "n": 28,  "setup": "M5_COMBO + st15",           "priority": 973},
-    {"rank": 28, "id": "R28_EURUSD_M5_COMBO_st10",    "strategy": "S19",     "market": "EURUSD", "tf": "M5", "preset": "M5_COMBO_st10",   "grade": "A+", "expr": 1.60, "wr": 95.0, "n": 40,  "setup": "M5_COMBO + st10",           "priority": 972},
-    {"rank": 29, "id": "R29_USDJPY_M5_COMBO_st10",    "strategy": "S19",     "market": "USDJPY", "tf": "M5", "preset": "M5_COMBO_st10",   "grade": "A+", "expr": 1.57, "wr": 94.1, "n": 34,  "setup": "M5_COMBO + st10",           "priority": 971},
-    {"rank": 30, "id": "R30_GBPUSD_MTF_PCT50",        "strategy": "S19_MTF", "market": "GBPUSD", "tf": "H1", "preset": "MTF_PCT50",       "grade": "S",  "expr": 1.42, "wr": 72.9, "n": 85,  "setup": "MTF_PCT50 H4→H1",           "priority": 970},
-    {"rank": 31, "id": "R31_EURUSD_H1_STRONG_OB",     "strategy": "S19",     "market": "EURUSD", "tf": "H1", "preset": "H1_STRONG_OB",    "grade": "S",  "expr": 1.32, "wr": 70.0, "n": 230, "setup": "H1 STRONG baseline",        "priority": 969},
-    {"rank": 32, "id": "R32_XAUUSD_H1_STRONG_OB",     "strategy": "S19",     "market": "XAUUSD", "tf": "H1", "preset": "H1_STRONG_OB",    "grade": "S",  "expr": 1.57, "wr": 78.4, "n": 167, "setup": "H1 STRONG + EMA50_s2",      "priority": 968},
-    {"rank": 33, "id": "R33_EURUSD_M30_STRONG_st05",  "strategy": "S19",     "market": "EURUSD", "tf": "M30","preset": "M30_STRONG_st05", "grade": "S",  "expr": 1.67, "wr": 80.4, "n": 225, "setup": "M30 STRONG + EMA50_st05",   "priority": 967},
-    {"rank": 34, "id": "R34_GBPUSD_M30_STRONG_st05",  "strategy": "S19",     "market": "GBPUSD", "tf": "M30","preset": "M30_STRONG_st05", "grade": "S",  "expr": 1.79, "wr": 84.2, "n": 222, "setup": "M30 STRONG + EMA50_st05",   "priority": 966},
-    {"rank": 35, "id": "R35_USDCHF_M30_STRONG_st05",  "strategy": "S19",     "market": "USDCHF", "tf": "M30","preset": "M30_STRONG_st05", "grade": "S",  "expr": 1.78, "wr": 83.8, "n": 210, "setup": "M30 STRONG + EMA50_st05",   "priority": 965},
-    {"rank": 36, "id": "R36_GBPUSD_H1_STRONG_OB",     "strategy": "S19",     "market": "GBPUSD", "tf": "H1", "preset": "H1_STRONG_OB",    "grade": "S",  "expr": 1.28, "wr": 69.0, "n": 216, "setup": "H1 STRONG baseline",        "priority": 964},
-    {"rank": 37, "id": "R37_XAUUSD_H1_STRONG_OB_b",   "strategy": "S19",     "market": "XAUUSD", "tf": "H1", "preset": "H1_STRONG_OB",    "grade": "A+", "expr": 1.21, "wr": 68.6, "n": 175, "setup": "H1 STRONG baseline",        "priority": 963},
-    {"rank": 38, "id": "R38_GBPUSD_M15_STRONG_st15",  "strategy": "S19",     "market": "GBPUSD", "tf": "M15","preset": "M15_STRONG_st15", "grade": "A+", "expr": 1.47, "wr": 89.0, "n": 82,  "setup": "M15_STRONG + st15",         "priority": 962},
-    {"rank": 39, "id": "R39_USDCHF_M15_STRONG_st15",  "strategy": "S19",     "market": "USDCHF", "tf": "M15","preset": "M15_STRONG_st15", "grade": "A+", "expr": 1.48, "wr": 89.2, "n": 83,  "setup": "M15_STRONG + st15",         "priority": 961},
-    {"rank": 40, "id": "R40_EURUSD_M15_COMBO_st15",   "strategy": "S19",     "market": "EURUSD", "tf": "M15","preset": "M15_COMBO_st15",  "grade": "A+", "expr": 1.50, "wr": 89.5, "n": 57,  "setup": "M15_COMBO + st15",          "priority": 960},
-    {"rank": 41, "id": "R41_XAUUSD_M5_COMBO_st05",    "strategy": "S19",     "market": "XAUUSD", "tf": "M5", "preset": "M5_COMBO_st05",   "grade": "A",  "expr": 1.38, "wr": 89.3, "n": 56,  "setup": "M5_COMBO + st05",           "priority": 959},
-    {"rank": 42, "id": "R42_XAUUSD_M5_COMBO",         "strategy": "S19",     "market": "XAUUSD", "tf": "M5", "preset": "M5_COMBO",        "grade": "A",  "expr": 1.37, "wr": 89.0, "n": 73,  "setup": "M5_COMBO baseline",         "priority": 958},
-    {"rank": 43, "id": "R43_USDJPY_M5_VOL40_st15",    "strategy": "S19",     "market": "USDJPY", "tf": "M5", "preset": "M5_VOL40_st15",   "grade": "A+", "expr": 1.54, "wr": 93.0, "n": 43,  "setup": "M5_VOL40 + st15",           "priority": 957},
-    {"rank": 44, "id": "R44_GBPUSD_M5_COMBO_st15",    "strategy": "S19",     "market": "GBPUSD", "tf": "M5", "preset": "M5_COMBO_st15",   "grade": "A",  "expr": 1.48, "wr": 91.9, "n": 37,  "setup": "M5_COMBO + st15",           "priority": 956},
-    {"rank": 45, "id": "R45_EURUSD_M15_STRONG_st10",  "strategy": "S19",     "market": "EURUSD", "tf": "M15","preset": "M15_STRONG_st10", "grade": "A",  "expr": 1.27, "wr": 81.6, "n": 136, "setup": "M15_STRONG + st10",         "priority": 955},
-    {"rank": 46, "id": "R46_EURUSD_M30_STRONG_OB",    "strategy": "S19",     "market": "EURUSD", "tf": "M30","preset": "M30_STRONG_OB",   "grade": "S",  "expr": 1.70, "wr": 81.4, "n": 258, "setup": "M30 STRONG baseline",       "priority": 954},
-    {"rank": 47, "id": "R47_GBPUSD_M30_STRONG_OB",    "strategy": "S19",     "market": "GBPUSD", "tf": "M30","preset": "M30_STRONG_OB",   "grade": "S",  "expr": 1.77, "wr": 84.0, "n": 257, "setup": "M30 STRONG baseline",       "priority": 953},
-    {"rank": 48, "id": "R48_XAUUSD_MTF_PCT50",        "strategy": "S19_MTF", "market": "XAUUSD", "tf": "H1", "preset": "MTF_PCT50",       "grade": "S",  "expr": 1.41, "wr": 74.3, "n": 70,  "setup": "MTF_PCT50 H4→H1",           "priority": 952},
-    {"rank": 49, "id": "R49_EURUSD_H1_DUAL",          "strategy": "S19",     "market": "EURUSD", "tf": "H1", "preset": "H1_DUAL",         "grade": "A+", "expr": 1.89, "wr": 86.2, "n": 167, "setup": "H1 STRONG + DUAL_50_200",   "priority": 951},
-    {"rank": 50, "id": "R50_EURUSD_M5_STRONG_st15",   "strategy": "S19",     "market": "EURUSD", "tf": "M5", "preset": "M5_STRONG_st15",  "grade": "A",  "expr": 1.39, "wr": 88.1, "n": 59,  "setup": "M5_STRONG + st15",          "priority": 950},
+    # ── Tier 1 — Flagship Core ──
+    {
+        "rank": 1, "tier": 1, "role": "Flagship",
+        "id": "T1_USDJPY_H1_STRONG_st15",
+        "strategy": "S19", "market": "USDJPY", "tf": "H1",
+        "preset": "H1_STRONG_st15", "rr": 8.0,
+        "grade": "S", "expr": 5.23, "wr": 71.0, "n": 62, "oos": 6.50, "maxdd": 5.6,
+        "setup": "USDJPY H1 STRONG_st15", "priority": 999,
+    },
+    {
+        "rank": 2, "tier": 1, "role": "Frequency + quality",
+        "id": "T1_USDJPY_M30_STRONG_st10",
+        "strategy": "S19", "market": "USDJPY", "tf": "M30",
+        "preset": "M30_STRONG_st10", "rr": 8.0,
+        "grade": "S", "expr": 4.81, "wr": 67.0, "n": 101, "oos": 3.89, "maxdd": 4.6,
+        "setup": "USDJPY M30 STRONG_st10", "priority": 998,
+    },
+    {
+        "rank": 3, "tier": 1, "role": "Best H4 EUR",
+        "id": "T1_EURUSD_H4_QUALITY_st10",
+        "strategy": "S19", "market": "EURUSD", "tf": "H4",
+        "preset": "H4_QUALITY_st10", "rr": 8.0,
+        "grade": "S", "expr": 4.75, "wr": 71.0, "n": 24, "oos": 6.78, "maxdd": 3.3,
+        "setup": "EURUSD H4 QUALITY_st10", "priority": 997,
+    },
+    {
+        "rank": 4, "tier": 1, "role": "Lowest-DD H4",
+        "id": "T1_USDCHF_H4_STRONG_OB",
+        "strategy": "S19", "market": "USDCHF", "tf": "H4",
+        "preset": "H4_STRONG_OB", "rr": 7.0,
+        "grade": "S", "expr": 4.50, "wr": 70.0, "n": 30, "oos": 5.67, "maxdd": 2.2,
+        "setup": "USDCHF H4 STRONG_OB", "priority": 996,
+    },
+
+    # ── Tier 2 — Core Expansion ──
+    {
+        "rank": 5, "tier": 2, "role": "More JPY H1 trades",
+        "id": "T2_USDJPY_H1_STRONG_st10",
+        "strategy": "S19", "market": "USDJPY", "tf": "H1",
+        "preset": "H1_STRONG_st10", "rr": 8.0,
+        "grade": "S", "expr": 4.39, "wr": 62.0, "n": 85, "oos": 4.88, "maxdd": 4.5,
+        "setup": "USDJPY H1 STRONG_st10", "priority": 995,
+    },
+    {
+        "rank": 6, "tier": 2, "role": "CHF H1 complement",
+        "id": "T2_USDCHF_H1_STRONG_st15",
+        "strategy": "S19", "market": "USDCHF", "tf": "H1",
+        "preset": "H1_STRONG_st15", "rr": 8.0,
+        "grade": "S", "expr": 4.36, "wr": 63.0, "n": 84, "oos": 4.31, "maxdd": 3.4,
+        "setup": "USDCHF H1 STRONG_st15", "priority": 994,
+    },
+    {
+        "rank": 7, "tier": 2, "role": "GBP diversification",
+        "id": "T2_GBPUSD_H1_STRONG_st15",
+        "strategy": "S19", "market": "GBPUSD", "tf": "H1",
+        "preset": "H1_STRONG_st15", "rr": 8.0,
+        "grade": "S", "expr": 4.08, "wr": 59.0, "n": 103, "oos": 4.91, "maxdd": 5.0,
+        "setup": "GBPUSD H1 STRONG_st15", "priority": 993,
+    },
+    {
+        "rank": 8, "tier": 2, "role": "EUR frequency",
+        "id": "T2_EURUSD_M30_STRONG_st15",
+        "strategy": "S19", "market": "EURUSD", "tf": "M30",
+        "preset": "M30_STRONG_st15", "rr": 8.0,
+        "grade": "S", "expr": 3.88, "wr": 58.0, "n": 121, "oos": 5.50, "maxdd": 5.8,
+        "setup": "EURUSD M30 STRONG_st15", "priority": 992,
+    },
+    {
+        "rank": 9, "tier": 2, "role": "High-WR H4 JPY",
+        "id": "T2_USDJPY_H4_QUALITY",
+        "strategy": "S19", "market": "USDJPY", "tf": "H4",
+        "preset": "H4_QUALITY", "rr": 6.0,
+        "grade": "S", "expr": 4.27, "wr": 77.0, "n": 30, "oos": 3.99, "maxdd": 2.0,
+        "setup": "USDJPY H4 QUALITY", "priority": 991,
+    },
+
+    # ── Tier 3 — Satellites ──
+    {
+        "rank": 10, "tier": 3, "role": "Scalp — cost sensitive",
+        "id": "T3_USDJPY_M5_VOL40_st15",
+        "strategy": "S19", "market": "USDJPY", "tf": "M5",
+        "preset": "M5_VOL40_st15", "rr": 8.0,
+        "grade": "A+", "expr": 4.61, "wr": 66.0, "n": 41, "oos": 6.94, "maxdd": None,
+        "setup": "USDJPY M5 VOL40_st15", "priority": 990,
+    },
+    {
+        "rank": 11, "tier": 3, "role": "Scalp CHF",
+        "id": "T3_USDCHF_M5_COMBO_st15",
+        "strategy": "S19", "market": "USDCHF", "tf": "M5",
+        "preset": "M5_COMBO_st15", "rr": 7.0,
+        "grade": "A+", "expr": 3.86, "wr": 65.0, "n": 63, "oos": 4.52, "maxdd": None,
+        "setup": "USDCHF M5 COMBO_st15", "priority": 989,
+    },
+    {
+        "rank": 12, "tier": 3, "role": "Extra EUR H1",
+        "id": "T3_EURUSD_H1_STRONG_st15",
+        "strategy": "S19", "market": "EURUSD", "tf": "H1",
+        "preset": "H1_STRONG_st15", "rr": 8.0,
+        "grade": "A+", "expr": 3.92, "wr": 60.0, "n": 99, "oos": 3.95, "maxdd": None,
+        "setup": "EURUSD H1 STRONG_st15", "priority": 988,
+    },
+    {
+        "rank": 13, "tier": 3, "role": "Prefer 6R GBP M30",
+        "id": "T3_GBPUSD_M30_STRONG_st15",
+        "strategy": "S19", "market": "GBPUSD", "tf": "M30",
+        "preset": "M30_STRONG_st15", "rr": 6.0,
+        "grade": "A+", "expr": 3.40, "wr": 65.0, "n": 112, "oos": 3.95, "maxdd": None,
+        "setup": "GBPUSD M30 STRONG_st15", "priority": 987,
+    },
+    {
+        "rank": 14, "tier": 3, "role": "JPY H1 COMBO",
+        "id": "T3_USDJPY_H1_COMBO_st10",
+        "strategy": "S19", "market": "USDJPY", "tf": "H1",
+        "preset": "H1_COMBO_st10", "rr": 8.0,
+        "grade": "A", "expr": 3.50, "wr": 60.0, "n": 0, "oos": None, "maxdd": None,
+        "setup": "USDJPY H1 DUAL / COMBO_st10", "priority": 986,
+    },
 ]
 
-# Tighter freshness → earlier alerts (bars ago on last closed bar)
 FRESH = {"M5": 2, "M15": 2, "M30": 2, "H1": 1, "H4": 1}
 
 
@@ -100,43 +165,59 @@ def _digits(market: str) -> int:
     return 5
 
 
-def _pack(mode, s, bars_ago, tf_label):
+def _pack(mode, s, bars_ago):
     d = _digits(mode["market"])
+    entry = float(s.entry_price)
+    rr = float(mode.get("rr", s.rr))
+    risk = abs(entry - float(s.stop))
+    if risk < 1e-12:
+        risk = abs(float(s.risk)) if getattr(s, "risk", 0) else 1e-9
+    if s.direction == 1:
+        sl = float(s.stop)
+        tp = entry + rr * risk
+    else:
+        sl = float(s.stop)
+        tp = entry - rr * risk
     return {
         "direction": "LONG" if s.direction == 1 else "SHORT",
         "mode": mode["id"],
         "rank": mode["rank"],
+        "tier": mode["tier"],
+        "role": mode["role"],
         "grade": mode["grade"],
         "strategy": "S19",
         "market": mode["market"],
-        "tf": tf_label,
+        "tf": mode["tf"],
         "preset": mode["preset"],
         "setup": mode["setup"],
-        "entry": round(float(s.entry_price), d),
-        "sl": round(float(s.stop), d),
-        "tp": round(float(s.target), d),
-        "risk": abs(float(s.entry_price) - float(s.stop)),
-        "rr": float(s.rr),
+        "entry": round(entry, d),
+        "sl": round(sl, d),
+        "tp": round(tp, d),
+        "risk": risk,
+        "rr": rr,
         "bars_ago": bars_ago,
         "priority": mode["priority"],
         "expr": mode["expr"],
         "wr": mode["wr"],
         "n_research": mode["n"],
+        "oos": mode.get("oos"),
+        "maxdd": mode.get("maxdd"),
         "poi_type": getattr(s, "poi_type", "OB"),
         "bias": getattr(s, "bias", ""),
     }
 
 
 def run_s19(mode, ohlc):
-    """Single-TF S19."""
     high, low, open_, close = ohlc["high"], ohlc["low"], ohlc["open"], ohlc["close"]
     times = ohlc.get("time")
     n = len(close)
     preset = mode["preset"]
     if preset not in PRESETS:
         return None, f"bad_preset({preset})"
+    params = dict(PRESETS[preset])
+    params["rr"] = float(mode.get("rr", params.get("rr", 2.5)))
     try:
-        signals = detect_with_preset(high, low, open_, close, times=times, preset=preset)
+        signals = detect_s19_signals(high, low, open_, close, times=times, **params)
     except Exception as e:
         return None, f"detect_error({e})"
     if not signals:
@@ -148,11 +229,10 @@ def run_s19(mode, ohlc):
         return None, f"expired_or_old (bars_ago={bars_ago} max={max_age})"
     if not _stop_still_valid(s, high, low, close):
         return None, "stop_already_hit"
-    return _pack(mode, s, bars_ago, mode["tf"]), "ok"
+    return _pack(mode, s, bars_ago), "ok"
 
 
 def run_s19_mtf(mode):
-    """H4 context → H1 entry."""
     market = mode["market"]
     ohlc4 = get_ohlc(market, "H4", limit=150)
     ohlc1 = get_ohlc(market, "H1", limit=300)
@@ -183,7 +263,8 @@ def run_s19_mtf(mode):
         return None, f"expired_or_old (bars_ago={bars_ago} max={max_age})"
     if not _stop_still_valid(s, ohlc1["high"], ohlc1["low"], ohlc1["close"]):
         return None, "stop_already_hit"
-    return _pack(mode, s, bars_ago, "H1"), "ok"
+    s.rr = float(mode.get("rr", s.rr))
+    return _pack(mode, s, bars_ago), "ok"
 
 
 def check_modes(modes, get_ohlc_func):
@@ -194,10 +275,13 @@ def check_modes(modes, get_ohlc_func):
         stats[k] = stats.get(k, 0) + 1
 
     for mode in modes:
-        tag = f"R{mode['rank']:02d} {mode['market']} {mode['tf']} [{mode['grade']}]"
+        tag = (
+            f"#{mode['rank']:02d} T{mode['tier']} [{mode['grade']}] "
+            f"{mode['market']} {mode['tf']} RR{mode['rr']:g}"
+        )
         print(f"  → {tag}  {mode['preset']}", flush=True)
         try:
-            if mode["strategy"] == "S19_MTF":
+            if mode.get("strategy") == "S19_MTF":
                 sig, reason = run_s19_mtf(mode)
             else:
                 ohlc = get_ohlc_func(mode["market"], mode["tf"])
@@ -217,7 +301,7 @@ def check_modes(modes, get_ohlc_func):
             print(
                 f"     ★ SIGNAL {sig['direction']} @ {sig['entry']}  "
                 f"SL={sig['sl']} TP={sig['tp']}  RR={sig['rr']}  "
-                f"bars_ago={sig['bars_ago']}  grade={sig['grade']}",
+                f"bars_ago={sig['bars_ago']}  grade={sig['grade']} tier={sig['tier']}",
                 flush=True,
             )
             results.append(sig)
@@ -231,7 +315,6 @@ def check_modes(modes, get_ohlc_func):
 
 
 def select_highest_modes(signals):
-    """Same market + direction + entry → keep highest priority (best rank)."""
     if not signals:
         return []
     groups = {}
@@ -241,5 +324,5 @@ def select_highest_modes(signals):
             groups[key] = s
     selected = list(groups.values())
     if len(signals) != len(selected):
-        print(f"  → Dedup {len(signals)} → {len(selected)} (highest rank kept)", flush=True)
+        print(f"  → Dedup {len(signals)} → {len(selected)} (best rank kept)", flush=True)
     return selected
