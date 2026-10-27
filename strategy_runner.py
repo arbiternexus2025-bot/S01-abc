@@ -1,144 +1,57 @@
+
 """
-APEX-19 Strategy Runner — Curated Tier Book
-===========================================
-S19 only. Research RR (6–8) applied per mode.
-Detailed reject logging. Tight freshness for earlier alerts.
-Highest-rank wins on duplicate market/direction/entry.
+APEX-19 Strategy Runner — Full Tier 1–5 Portfolio
+================================================
+Uses S19_pattern_detection portfolio presets (*_rr4/5/6/7/8).
+Detailed reject logging. Tight freshness. Best-rank dedup.
 """
 from __future__ import annotations
 from data_feed import get_ohlc
 from S19_pattern_detection import (
     detect_s19_signals,
-    detect_mtf_with_preset,
+    detect_with_preset,
     PRESETS,
-    MTF_PRESETS,
+    portfolio_routes,
 )
 
-# ─────────────────────────────────────────────────────────────
-# CURATED BOOK (research RR 6–8)
-# Tier 1 = Flagship | Tier 2 = Core | Tier 3 = Satellite
-# priority = 1000 - rank
-# ─────────────────────────────────────────────────────────────
+# Build MODES from detector portfolio_routes (single source of truth)
+def _build_modes():
+    modes = []
+    for i, r in enumerate(portfolio_routes(), start=1):
+        preset = r.get("preset") or r["route"]
+        m = r.get("metrics") or {}
+        modes.append({
+            "rank": i,
+            "tier": r["tier"],
+            "role": r["role"],
+            "id": f"T{r['tier']}_{r['symbol']}_{preset}",
+            "strategy": "S19",
+            "market": r["symbol"],
+            "tf": r["tf"],
+            "preset": preset,
+            "rr": float(r["rr"]),
+            "grade": "S" if r["tier"] <= 2 else ("A+" if r["tier"] == 3 else ("A" if r["tier"] == 4 else "B+")),
+            "expr": m.get("ExpR", 0),
+            "wr": m.get("WR", 0),
+            "n": int(m.get("N", 0)),
+            "oos": m.get("OOS"),
+            "maxdd": m.get("MaxDD"),
+            "setup": f"{r['symbol']} {r['tf']} {preset}",
+            "priority": 1000 - i - (r["tier"] * 10),
+            "route": r["route"],
+        })
+    # Re-rank by tier then ExpR so Tier1 stays highest priority
+    modes.sort(key=lambda x: (x["tier"], -(x["expr"] or 0)))
+    for i, m in enumerate(modes, start=1):
+        m["rank"] = i
+        m["priority"] = 1000 - i
+    return modes
 
-MODES = [
-    # ── Tier 1 — Flagship Core ──
-    {
-        "rank": 1, "tier": 1, "role": "Flagship",
-        "id": "T1_USDJPY_H1_STRONG_st15",
-        "strategy": "S19", "market": "USDJPY", "tf": "H1",
-        "preset": "H1_STRONG_st15", "rr": 8.0,
-        "grade": "S", "expr": 5.23, "wr": 71.0, "n": 62, "oos": 6.50, "maxdd": 5.6,
-        "setup": "USDJPY H1 STRONG_st15", "priority": 999,
-    },
-    {
-        "rank": 2, "tier": 1, "role": "Frequency + quality",
-        "id": "T1_USDJPY_M30_STRONG_st10",
-        "strategy": "S19", "market": "USDJPY", "tf": "M30",
-        "preset": "M30_STRONG_st10", "rr": 8.0,
-        "grade": "S", "expr": 4.81, "wr": 67.0, "n": 101, "oos": 3.89, "maxdd": 4.6,
-        "setup": "USDJPY M30 STRONG_st10", "priority": 998,
-    },
-    {
-        "rank": 3, "tier": 1, "role": "Best H4 EUR",
-        "id": "T1_EURUSD_H4_QUALITY_st10",
-        "strategy": "S19", "market": "EURUSD", "tf": "H4",
-        "preset": "H4_QUALITY_st10", "rr": 8.0,
-        "grade": "S", "expr": 4.75, "wr": 71.0, "n": 24, "oos": 6.78, "maxdd": 3.3,
-        "setup": "EURUSD H4 QUALITY_st10", "priority": 997,
-    },
-    {
-        "rank": 4, "tier": 1, "role": "Lowest-DD H4",
-        "id": "T1_USDCHF_H4_STRONG_OB",
-        "strategy": "S19", "market": "USDCHF", "tf": "H4",
-        "preset": "H4_STRONG_OB", "rr": 7.0,
-        "grade": "S", "expr": 4.50, "wr": 70.0, "n": 30, "oos": 5.67, "maxdd": 2.2,
-        "setup": "USDCHF H4 STRONG_OB", "priority": 996,
-    },
-
-    # ── Tier 2 — Core Expansion ──
-    {
-        "rank": 5, "tier": 2, "role": "More JPY H1 trades",
-        "id": "T2_USDJPY_H1_STRONG_st10",
-        "strategy": "S19", "market": "USDJPY", "tf": "H1",
-        "preset": "H1_STRONG_st10", "rr": 8.0,
-        "grade": "S", "expr": 4.39, "wr": 62.0, "n": 85, "oos": 4.88, "maxdd": 4.5,
-        "setup": "USDJPY H1 STRONG_st10", "priority": 995,
-    },
-    {
-        "rank": 6, "tier": 2, "role": "CHF H1 complement",
-        "id": "T2_USDCHF_H1_STRONG_st15",
-        "strategy": "S19", "market": "USDCHF", "tf": "H1",
-        "preset": "H1_STRONG_st15", "rr": 8.0,
-        "grade": "S", "expr": 4.36, "wr": 63.0, "n": 84, "oos": 4.31, "maxdd": 3.4,
-        "setup": "USDCHF H1 STRONG_st15", "priority": 994,
-    },
-    {
-        "rank": 7, "tier": 2, "role": "GBP diversification",
-        "id": "T2_GBPUSD_H1_STRONG_st15",
-        "strategy": "S19", "market": "GBPUSD", "tf": "H1",
-        "preset": "H1_STRONG_st15", "rr": 8.0,
-        "grade": "S", "expr": 4.08, "wr": 59.0, "n": 103, "oos": 4.91, "maxdd": 5.0,
-        "setup": "GBPUSD H1 STRONG_st15", "priority": 993,
-    },
-    {
-        "rank": 8, "tier": 2, "role": "EUR frequency",
-        "id": "T2_EURUSD_M30_STRONG_st15",
-        "strategy": "S19", "market": "EURUSD", "tf": "M30",
-        "preset": "M30_STRONG_st15", "rr": 8.0,
-        "grade": "S", "expr": 3.88, "wr": 58.0, "n": 121, "oos": 5.50, "maxdd": 5.8,
-        "setup": "EURUSD M30 STRONG_st15", "priority": 992,
-    },
-    {
-        "rank": 9, "tier": 2, "role": "High-WR H4 JPY",
-        "id": "T2_USDJPY_H4_QUALITY",
-        "strategy": "S19", "market": "USDJPY", "tf": "H4",
-        "preset": "H4_QUALITY", "rr": 6.0,
-        "grade": "S", "expr": 4.27, "wr": 77.0, "n": 30, "oos": 3.99, "maxdd": 2.0,
-        "setup": "USDJPY H4 QUALITY", "priority": 991,
-    },
-
-    # ── Tier 3 — Satellites ──
-    {
-        "rank": 10, "tier": 3, "role": "Scalp — cost sensitive",
-        "id": "T3_USDJPY_M5_VOL40_st15",
-        "strategy": "S19", "market": "USDJPY", "tf": "M5",
-        "preset": "M5_VOL40_st15", "rr": 8.0,
-        "grade": "A+", "expr": 4.61, "wr": 66.0, "n": 41, "oos": 6.94, "maxdd": None,
-        "setup": "USDJPY M5 VOL40_st15", "priority": 990,
-    },
-    {
-        "rank": 11, "tier": 3, "role": "Scalp CHF",
-        "id": "T3_USDCHF_M5_COMBO_st15",
-        "strategy": "S19", "market": "USDCHF", "tf": "M5",
-        "preset": "M5_COMBO_st15", "rr": 7.0,
-        "grade": "A+", "expr": 3.86, "wr": 65.0, "n": 63, "oos": 4.52, "maxdd": None,
-        "setup": "USDCHF M5 COMBO_st15", "priority": 989,
-    },
-    {
-        "rank": 12, "tier": 3, "role": "Extra EUR H1",
-        "id": "T3_EURUSD_H1_STRONG_st15",
-        "strategy": "S19", "market": "EURUSD", "tf": "H1",
-        "preset": "H1_STRONG_st15", "rr": 8.0,
-        "grade": "A+", "expr": 3.92, "wr": 60.0, "n": 99, "oos": 3.95, "maxdd": None,
-        "setup": "EURUSD H1 STRONG_st15", "priority": 988,
-    },
-    {
-        "rank": 13, "tier": 3, "role": "Prefer 6R GBP M30",
-        "id": "T3_GBPUSD_M30_STRONG_st15",
-        "strategy": "S19", "market": "GBPUSD", "tf": "M30",
-        "preset": "M30_STRONG_st15", "rr": 6.0,
-        "grade": "A+", "expr": 3.40, "wr": 65.0, "n": 112, "oos": 3.95, "maxdd": None,
-        "setup": "GBPUSD M30 STRONG_st15", "priority": 987,
-    },
-    {
-        "rank": 14, "tier": 3, "role": "JPY H1 COMBO",
-        "id": "T3_USDJPY_H1_COMBO_st10",
-        "strategy": "S19", "market": "USDJPY", "tf": "H1",
-        "preset": "H1_COMBO_st10", "rr": 8.0,
-        "grade": "A", "expr": 3.50, "wr": 60.0, "n": 0, "oos": None, "maxdd": None,
-        "setup": "USDJPY H1 DUAL / COMBO_st10", "priority": 986,
-    },
-]
+try:
+    MODES = _build_modes()
+except Exception as e:
+    print(f"[APEX] portfolio_routes load failed: {e} — using empty", flush=True)
+    MODES = []
 
 FRESH = {"M5": 2, "M15": 2, "M30": 2, "H1": 1, "H4": 1}
 
@@ -168,16 +81,14 @@ def _digits(market: str) -> int:
 def _pack(mode, s, bars_ago):
     d = _digits(mode["market"])
     entry = float(s.entry_price)
-    rr = float(mode.get("rr", s.rr))
+    rr = float(mode.get("rr", getattr(s, "rr", 2.5)))
     risk = abs(entry - float(s.stop))
     if risk < 1e-12:
-        risk = abs(float(s.risk)) if getattr(s, "risk", 0) else 1e-9
+        risk = abs(float(getattr(s, "risk", 0))) or 1e-9
     if s.direction == 1:
-        sl = float(s.stop)
-        tp = entry + rr * risk
+        sl, tp = float(s.stop), entry + rr * risk
     else:
-        sl = float(s.stop)
-        tp = entry - rr * risk
+        sl, tp = float(s.stop), entry - rr * risk
     return {
         "direction": "LONG" if s.direction == 1 else "SHORT",
         "mode": mode["id"],
@@ -214,9 +125,13 @@ def run_s19(mode, ohlc):
     preset = mode["preset"]
     if preset not in PRESETS:
         return None, f"bad_preset({preset})"
-    params = dict(PRESETS[preset])
-    params["rr"] = float(mode.get("rr", params.get("rr", 2.5)))
+    # Preset already encodes RR; still force mode RR if different
     try:
+        signals = detect_with_preset(high, low, open_, close, times=times, preset=preset)
+    except TypeError:
+        # older signature fallback
+        params = dict(PRESETS[preset])
+        params["rr"] = float(mode.get("rr", params.get("rr", 2.5)))
         signals = detect_s19_signals(high, low, open_, close, times=times, **params)
     except Exception as e:
         return None, f"detect_error({e})"
@@ -229,41 +144,6 @@ def run_s19(mode, ohlc):
         return None, f"expired_or_old (bars_ago={bars_ago} max={max_age})"
     if not _stop_still_valid(s, high, low, close):
         return None, "stop_already_hit"
-    return _pack(mode, s, bars_ago), "ok"
-
-
-def run_s19_mtf(mode):
-    market = mode["market"]
-    ohlc4 = get_ohlc(market, "H4", limit=150)
-    ohlc1 = get_ohlc(market, "H1", limit=300)
-    if ohlc4 is None or ohlc1 is None:
-        return None, "no_data"
-    if "open" not in ohlc1:
-        ohlc1["open"] = ohlc1["close"]
-    if len(ohlc1["close"]) < 80 or len(ohlc4["close"]) < 40:
-        return None, "no_data"
-    preset = mode["preset"]
-    if preset not in MTF_PRESETS:
-        return None, f"bad_mtf_preset({preset})"
-    try:
-        signals = detect_mtf_with_preset(
-            ohlc4["high"], ohlc4["low"], ohlc4["close"], ohlc4["time"],
-            ohlc1["high"], ohlc1["low"], ohlc1["open"], ohlc1["close"], ohlc1["time"],
-            preset=preset,
-        )
-    except Exception as e:
-        return None, f"mtf_error({e})"
-    if not signals:
-        return None, "no_signal"
-    s = signals[-1]
-    n = len(ohlc1["close"])
-    bars_ago = n - 1 - s.entry_bar
-    max_age = FRESH.get("H1", 1)
-    if bars_ago > max_age:
-        return None, f"expired_or_old (bars_ago={bars_ago} max={max_age})"
-    if not _stop_still_valid(s, ohlc1["high"], ohlc1["low"], ohlc1["close"]):
-        return None, "stop_already_hit"
-    s.rr = float(mode.get("rr", s.rr))
     return _pack(mode, s, bars_ago), "ok"
 
 
@@ -281,18 +161,14 @@ def check_modes(modes, get_ohlc_func):
         )
         print(f"  → {tag}  {mode['preset']}", flush=True)
         try:
-            if mode.get("strategy") == "S19_MTF":
-                sig, reason = run_s19_mtf(mode)
-            else:
-                ohlc = get_ohlc_func(mode["market"], mode["tf"])
-                if ohlc is None or len(ohlc["close"]) < 80:
-                    print("     ✗ [no_data]", flush=True)
-                    bump("no_data")
-                    continue
-                if "open" not in ohlc:
-                    ohlc["open"] = ohlc["close"]
-                sig, reason = run_s19(mode, ohlc)
-
+            ohlc = get_ohlc_func(mode["market"], mode["tf"])
+            if ohlc is None or len(ohlc["close"]) < 80:
+                print("     ✗ [no_data]", flush=True)
+                bump("no_data")
+                continue
+            if "open" not in ohlc:
+                ohlc["open"] = ohlc["close"]
+            sig, reason = run_s19(mode, ohlc)
             key = reason.split()[0] if reason else "other"
             bump(key)
             if sig is None:
@@ -309,8 +185,7 @@ def check_modes(modes, get_ohlc_func):
             bump("error")
             print(f"     ✗ [error] {e}", flush=True)
 
-    summary = " ".join(f"{k}={v}" for k, v in sorted(stats.items()))
-    print(f"  == {summary}", flush=True)
+    print("  == " + " ".join(f"{k}={v}" for k, v in sorted(stats.items())), flush=True)
     return results
 
 
