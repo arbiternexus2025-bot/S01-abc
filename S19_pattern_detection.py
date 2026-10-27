@@ -736,6 +736,124 @@ PRESETS: Dict[str, dict] = {
         session="LONDON_NY", vol_min_pct=0.20, max_poi_age=36,
         sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_st10",
     ),
+
+    # Tier 4 — Best RR=5 (higher WR, balanced ExpR)
+    "H4_QUALITY_st10_rr5": dict(
+        pivot_left=5, pivot_right=5, rr=5.0, min_disp_atr=0.95,
+        ob_min_body=0.55, bos_body_min=0.40, bos_mode="PCT50",
+        session="LONDON_NY", vol_min_pct=0.25, max_poi_age=28,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_st10",
+    ),
+    "H4_STRONG_st10_rr5": dict(
+        pivot_left=5, pivot_right=5, rr=5.0, min_disp_atr=0.90,
+        ob_min_body=0.55, bos_body_min=0.40, bos_mode="PCT50",
+        session="ALL", vol_min_pct=0.0, max_poi_age=28,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_st10",
+    ),
+    "H4_QUALITY_rr5": dict(
+        pivot_left=5, pivot_right=5, rr=5.0, min_disp_atr=0.95,
+        ob_min_body=0.55, bos_body_min=0.40, bos_mode="PCT50",
+        session="LONDON_NY", vol_min_pct=0.25, max_poi_age=28,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_s2",
+    ),
+    "H4_STRONG_OB_rr5": dict(
+        pivot_left=5, pivot_right=5, rr=5.0, min_disp_atr=0.90,
+        ob_min_body=0.55, bos_body_min=0.40, bos_mode="PCT50",
+        session="ALL", vol_min_pct=0.0, max_poi_age=28,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_s2",
+    ),
+    "H1_STRONG_st15_rr5": dict(
+        pivot_left=5, pivot_right=5, rr=5.0, min_disp_atr=0.90,
+        ob_min_body=0.55, bos_body_min=0.40, bos_mode="PCT50",
+        session="ALL", vol_min_pct=0.0, max_poi_age=36,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_st15",
+    ),
+    "H1_STRONG_st10_rr5": dict(
+        pivot_left=5, pivot_right=5, rr=5.0, min_disp_atr=0.90,
+        ob_min_body=0.55, bos_body_min=0.40, bos_mode="PCT50",
+        session="ALL", vol_min_pct=0.0, max_poi_age=36,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_st10",
+    ),
+    "M30_STRONG_st15_rr5": dict(
+        pivot_left=5, pivot_right=5, rr=5.0, min_disp_atr=0.85,
+        ob_min_body=0.50, bos_body_min=0.35, bos_mode="PCT50",
+        session="ALL", vol_min_pct=0.0, max_poi_age=40,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_st15",
+    ),
+    "M30_STRONG_st10_rr5": dict(
+        pivot_left=5, pivot_right=5, rr=5.0, min_disp_atr=0.85,
+        ob_min_body=0.50, bos_body_min=0.35, bos_mode="PCT50",
+        session="ALL", vol_min_pct=0.0, max_poi_age=40,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_st10",
+    ),
+    "M5_VOL40_st15_rr5": dict(
+        pivot_left=5, pivot_right=5, rr=5.0, min_disp_atr=0.80,
+        ob_min_body=0.50, bos_body_min=0.35, bos_mode="PCT50",
+        session="ALL", vol_min_pct=0.40, max_poi_age=48,
+        sl_buffer_atr=0.15, allow_fvg_fallback=True, bias_mode="EMA50_st15",
+    ),
+    "M5_COMBO_st15_rr5": dict(
+        pivot_left=3, pivot_right=3, rr=5.0, min_disp_atr=0.70,
+        ob_min_body=0.45, bos_body_min=0.30, bos_mode="PCT50",
+        session="LONDON_NY", vol_min_pct=0.15, max_poi_age=48,
+        sl_buffer_atr=0.15, allow_fvg_fallback=True, bias_mode="EMA50_st15",
+    ),
+
+    # Tier 5 — Best RR=4 (highest WR, conservative)
+    "H4_QUALITY_st10_rr4": dict(
+        pivot_left=5, pivot_right=5, rr=4.0, min_disp_atr=0.95,
+        ob_min_body=0.55, bos_body_min=0.40, bos_mode="PCT50",
+        session="LONDON_NY", vol_min_pct=0.25, max_poi_age=28,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_st10",
+    ),
+    "H4_STRONG_st10_rr4": dict(
+        pivot_left=5, pivot_right=5, rr=4.0, min_disp_atr=0.90,
+        ob_min_body=0.55, bos_body_min=0.40, bos_mode="PCT50",
+        session="ALL", vol_min_pct=0.0, max_poi_age=28,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_st10",
+    ),
+    "H4_QUALITY_rr4": dict(
+        pivot_left=5, pivot_right=5, rr=4.0, min_disp_atr=0.95,
+        ob_min_body=0.55, bos_body_min=0.40, bos_mode="PCT50",
+        session="LONDON_NY", vol_min_pct=0.25, max_poi_age=28,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_s2",
+    ),
+    "H4_STRONG_OB_rr4": dict(
+        pivot_left=5, pivot_right=5, rr=4.0, min_disp_atr=0.90,
+        ob_min_body=0.55, bos_body_min=0.40, bos_mode="PCT50",
+        session="ALL", vol_min_pct=0.0, max_poi_age=28,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_s2",
+    ),
+    "H1_STRONG_st15_rr4": dict(
+        pivot_left=5, pivot_right=5, rr=4.0, min_disp_atr=0.90,
+        ob_min_body=0.55, bos_body_min=0.40, bos_mode="PCT50",
+        session="ALL", vol_min_pct=0.0, max_poi_age=36,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_st15",
+    ),
+    "H1_STRONG_st10_rr4": dict(
+        pivot_left=5, pivot_right=5, rr=4.0, min_disp_atr=0.90,
+        ob_min_body=0.55, bos_body_min=0.40, bos_mode="PCT50",
+        session="ALL", vol_min_pct=0.0, max_poi_age=36,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_st10",
+    ),
+    "M30_STRONG_st15_rr4": dict(
+        pivot_left=5, pivot_right=5, rr=4.0, min_disp_atr=0.85,
+        ob_min_body=0.50, bos_body_min=0.35, bos_mode="PCT50",
+        session="ALL", vol_min_pct=0.0, max_poi_age=40,
+        sl_buffer_atr=0.12, allow_fvg_fallback=True, bias_mode="EMA50_st15",
+    ),
+    "M5_VOL40_st15_rr4": dict(
+        pivot_left=5, pivot_right=5, rr=4.0, min_disp_atr=0.80,
+        ob_min_body=0.50, bos_body_min=0.35, bos_mode="PCT50",
+        session="ALL", vol_min_pct=0.40, max_poi_age=48,
+        sl_buffer_atr=0.15, allow_fvg_fallback=True, bias_mode="EMA50_st15",
+    ),
+    "M15_COMBO_st15_rr4": dict(
+        pivot_left=3, pivot_right=3, rr=4.0, min_disp_atr=0.75,
+        ob_min_body=0.45, bos_body_min=0.30, bos_mode="PCT50",
+        session="LONDON_NY", vol_min_pct=0.15, max_poi_age=44,
+        sl_buffer_atr=0.14, allow_fvg_fallback=True, bias_mode="EMA50_st15",
+    ),
 }
 
 
@@ -824,6 +942,163 @@ PORTFOLIO_CORE: Dict[str, dict] = {
         "tier": 3, "symbol": "USDJPY", "tf": "H1",
         "role": "Alt COMBO bias", "rr": 8.0,
         "metrics": {"N": 84, "WR": 60.0, "ExpR": 4.10, "OOS": 4.19, "MaxDD": 4.5},
+    },
+
+    # Tier 4 — RR=5 (higher WR, balanced)
+    "H4_QUALITY_st10_rr5_JPY": {
+        "tier": 4, "symbol": "USDJPY", "tf": "H4",
+        "preset": "H4_QUALITY_st10_rr5",
+        "role": "Best RR5 overall", "rr": 5.0,
+        "metrics": {"N": 19, "WR": 94.7, "ExpR": 4.58, "OOS": 4.90, "MaxDD": 1.1},
+    },
+    "H4_STRONG_st10_rr5_CHF": {
+        "tier": 4, "symbol": "USDCHF", "tf": "H4",
+        "preset": "H4_STRONG_st10_rr5",
+        "role": "CHF H4 RR5", "rr": 5.0,
+        "metrics": {"N": 19, "WR": 89.5, "ExpR": 4.27, "OOS": 4.90, "MaxDD": 1.1},
+    },
+    "H4_QUALITY_st10_rr5_CHF": {
+        "tier": 4, "symbol": "USDCHF", "tf": "H4",
+        "preset": "H4_QUALITY_st10_rr5",
+        "role": "CHF H4 quality RR5", "rr": 5.0,
+        "metrics": {"N": 18, "WR": 88.9, "ExpR": 4.23, "OOS": 4.90, "MaxDD": 1.1},
+    },
+    "M5_VOL40_st15_rr5": {
+        "tier": 4, "symbol": "USDJPY", "tf": "M5",
+        "role": "M5 scalp RR5", "rr": 5.0,
+        "metrics": {"N": 41, "WR": 85.4, "ExpR": 3.92, "OOS": 4.80, "MaxDD": 2.4},
+    },
+    "H4_STRONG_st10_rr5_JPY": {
+        "tier": 4, "symbol": "USDJPY", "tf": "H4",
+        "preset": "H4_STRONG_st10_rr5",
+        "role": "JPY H4 strong RR5", "rr": 5.0,
+        "metrics": {"N": 23, "WR": 82.6, "ExpR": 3.86, "OOS": 3.57, "MaxDD": 1.1},
+    },
+    "H4_QUALITY_rr5_JPY": {
+        "tier": 4, "symbol": "USDJPY", "tf": "H4",
+        "preset": "H4_QUALITY_rr5",
+        "role": "JPY H4 quality RR5", "rr": 5.0,
+        "metrics": {"N": 30, "WR": 83.3, "ExpR": 3.80, "OOS": 3.81, "MaxDD": 1.1},
+    },
+    "H1_STRONG_st15_rr5_JPY": {
+        "tier": 4, "symbol": "USDJPY", "tf": "H1",
+        "preset": "H1_STRONG_st15_rr5",
+        "role": "Flagship at RR5", "rr": 5.0,
+        "metrics": {"N": 65, "WR": 81.5, "ExpR": 3.76, "OOS": 3.95, "MaxDD": 4.5},
+    },
+    "H4_STRONG_OB_rr5_CHF": {
+        "tier": 4, "symbol": "USDCHF", "tf": "H4",
+        "preset": "H4_STRONG_OB_rr5",
+        "role": "CHF H4 OB RR5", "rr": 5.0,
+        "metrics": {"N": 30, "WR": 80.0, "ExpR": 3.62, "OOS": 4.44, "MaxDD": 2.2},
+    },
+    "M30_STRONG_st15_rr5_JPY": {
+        "tier": 4, "symbol": "USDJPY", "tf": "M30",
+        "preset": "M30_STRONG_st15_rr5",
+        "role": "JPY M30 RR5", "rr": 5.0,
+        "metrics": {"N": 74, "WR": 78.4, "ExpR": 3.51, "OOS": 2.63, "MaxDD": 2.3},
+    },
+    "H1_STRONG_st15_rr5_CHF": {
+        "tier": 4, "symbol": "USDCHF", "tf": "H1",
+        "preset": "H1_STRONG_st15_rr5",
+        "role": "CHF H1 RR5", "rr": 5.0,
+        "metrics": {"N": 88, "WR": 77.3, "ExpR": 3.39, "OOS": 3.71, "MaxDD": 2.3},
+    },
+    "H1_STRONG_st15_rr5_EUR": {
+        "tier": 4, "symbol": "EURUSD", "tf": "H1",
+        "preset": "H1_STRONG_st15_rr5",
+        "role": "EUR H1 RR5", "rr": 5.0,
+        "metrics": {"N": 102, "WR": 75.5, "ExpR": 3.35, "OOS": 4.12, "MaxDD": 2.3},
+    },
+    "M30_STRONG_st15_rr5_CHF": {
+        "tier": 4, "symbol": "USDCHF", "tf": "M30",
+        "preset": "M30_STRONG_st15_rr5",
+        "role": "CHF M30 RR5", "rr": 5.0,
+        "metrics": {"N": 102, "WR": 77.5, "ExpR": 3.40, "OOS": 4.12, "MaxDD": 4.6},
+    },
+    "M5_COMBO_st15_rr5": {
+        "tier": 4, "symbol": "USDCHF", "tf": "M5",
+        "role": "CHF M5 scalp RR5", "rr": 5.0,
+        "metrics": {"N": 63, "WR": 77.8, "ExpR": 3.40, "OOS": 3.44, "MaxDD": 2.4},
+    },
+
+    # Tier 5 — RR=4 (highest WR, conservative)
+    "H4_QUALITY_st10_rr4_JPY": {
+        "tier": 5, "symbol": "USDJPY", "tf": "H4",
+        "preset": "H4_QUALITY_st10_rr4",
+        "role": "Best RR4 overall", "rr": 4.0,
+        "metrics": {"N": 21, "WR": 100.0, "ExpR": 3.90, "OOS": 3.90, "MaxDD": 0.0},
+    },
+    "H4_STRONG_st10_rr4_JPY": {
+        "tier": 5, "symbol": "USDJPY", "tf": "H4",
+        "preset": "H4_STRONG_st10_rr4",
+        "role": "JPY H4 strong RR4", "rr": 4.0,
+        "metrics": {"N": 25, "WR": 92.0, "ExpR": 3.50, "OOS": 2.90, "MaxDD": 1.1},
+    },
+    "H4_STRONG_st10_rr4_CHF": {
+        "tier": 5, "symbol": "USDCHF", "tf": "H4",
+        "preset": "H4_STRONG_st10_rr4",
+        "role": "CHF H4 RR4", "rr": 4.0,
+        "metrics": {"N": 20, "WR": 90.0, "ExpR": 3.40, "OOS": 3.90, "MaxDD": 1.1},
+    },
+    "H4_QUALITY_st10_rr4_CHF": {
+        "tier": 5, "symbol": "USDCHF", "tf": "H4",
+        "preset": "H4_QUALITY_st10_rr4",
+        "role": "CHF H4 quality RR4", "rr": 4.0,
+        "metrics": {"N": 19, "WR": 89.5, "ExpR": 3.37, "OOS": 3.90, "MaxDD": 1.1},
+    },
+    "M5_VOL40_st15_rr4": {
+        "tier": 5, "symbol": "USDJPY", "tf": "M5",
+        "role": "M5 scalp RR4", "rr": 4.0,
+        "metrics": {"N": 42, "WR": 90.5, "ExpR": 3.32, "OOS": 3.80, "MaxDD": 2.4},
+    },
+    "H4_QUALITY_rr4_JPY": {
+        "tier": 5, "symbol": "USDJPY", "tf": "H4",
+        "preset": "H4_QUALITY_rr4",
+        "role": "JPY H4 quality RR4", "rr": 4.0,
+        "metrics": {"N": 32, "WR": 87.5, "ExpR": 3.28, "OOS": 3.07, "MaxDD": 1.1},
+    },
+    "H4_STRONG_OB_rr4_XAU": {
+        "tier": 5, "symbol": "XAUUSD", "tf": "H4",
+        "preset": "H4_STRONG_OB_rr4",
+        "role": "XAU H4 RR4", "rr": 4.0,
+        "metrics": {"N": 21, "WR": 85.7, "ExpR": 3.14, "OOS": 2.42, "MaxDD": 2.3},
+    },
+    "H1_STRONG_st15_rr4_JPY": {
+        "tier": 5, "symbol": "USDJPY", "tf": "H1",
+        "preset": "H1_STRONG_st15_rr4",
+        "role": "JPY H1 RR4", "rr": 4.0,
+        "metrics": {"N": 65, "WR": 83.1, "ExpR": 3.02, "OOS": 3.10, "MaxDD": 4.5},
+    },
+    "H1_STRONG_st15_rr4_EUR": {
+        "tier": 5, "symbol": "EURUSD", "tf": "H1",
+        "preset": "H1_STRONG_st15_rr4",
+        "role": "EUR H1 RR4", "rr": 4.0,
+        "metrics": {"N": 103, "WR": 83.5, "ExpR": 2.97, "OOS": 3.43, "MaxDD": 2.3},
+    },
+    "H1_STRONG_st15_rr4_GBP": {
+        "tier": 5, "symbol": "GBPUSD", "tf": "H1",
+        "preset": "H1_STRONG_st15_rr4",
+        "role": "GBP H1 RR4", "rr": 4.0,
+        "metrics": {"N": 107, "WR": 82.2, "ExpR": 2.95, "OOS": 3.17, "MaxDD": 3.4},
+    },
+    "H4_STRONG_OB_rr4_CHF": {
+        "tier": 5, "symbol": "USDCHF", "tf": "H4",
+        "preset": "H4_STRONG_OB_rr4",
+        "role": "CHF H4 OB RR4", "rr": 4.0,
+        "metrics": {"N": 31, "WR": 80.6, "ExpR": 2.93, "OOS": 3.52, "MaxDD": 2.2},
+    },
+    "H1_STRONG_st10_rr4_JPY": {
+        "tier": 5, "symbol": "USDJPY", "tf": "H1",
+        "preset": "H1_STRONG_st10_rr4",
+        "role": "JPY H1 st10 RR4", "rr": 4.0,
+        "metrics": {"N": 89, "WR": 80.9, "ExpR": 2.92, "OOS": 2.68, "MaxDD": 1.1},
+    },
+    "M15_COMBO_st15_rr4_GBP": {
+        "tier": 5, "symbol": "GBPUSD", "tf": "M15",
+        "preset": "M15_COMBO_st15_rr4",
+        "role": "GBP M15 RR4", "rr": 4.0,
+        "metrics": {"N": 58, "WR": 84.5, "ExpR": 3.04, "OOS": 2.26, "MaxDD": 2.4},
     },
 }
 
