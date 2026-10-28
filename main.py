@@ -1,8 +1,6 @@
 """
-APEX-19 — Full Tier 1–5 S19 Live Engine
-=======================================
-Tier1 Flagship · Tier2 Core · Tier3 Satellite · Tier4 RR5 · Tier5 RR4
-Research RR 4–8 · Detailed logs · Fast scans
+APEX-19 — S19 Tier 1–5 + S29 Fib Rejection Live Engine
+======================================================
 """
 from flask import Flask
 import time
@@ -33,12 +31,24 @@ SCAN = {
 def format_signal(s):
     emoji = "🟢 LONG" if s["direction"] == "LONG" else "🔴 SHORT"
     stars = {"S": "⭐⭐⭐", "A+": "⭐⭐", "A": "⭐", "B+": "·"}.get(s.get("grade", ""), "⭐")
+    strat = s.get("strategy", "S19")
     oos = s.get("oos")
     oos_txt = f"+{oos:.2f}" if isinstance(oos, (int, float)) else "—"
     dd = s.get("maxdd")
     dd_txt = f"{dd:.1f}R" if isinstance(dd, (int, float)) else "—"
+    tp2 = s.get("tp2")
+    tp_block = f"Take Profit: <code>{s['tp']}</code>"
+    if tp2 is not None:
+        tp_block = (
+            f"TP1 (mid): <code>{s['tp']}</code>\n"
+            f"TP2 (opp): <code>{tp2}</code>"
+        )
+    rr_line = f"RR: <b>{s.get('rr', '—')}</b>"
+    if strat == "S29":
+        rr_line = f"RR→mid: <b>{s.get('rr', '—')}</b>  ·  Structural targets"
+    header = "APEX-19 S29" if strat == "S29" else "APEX-19 S19"
     return f"""
-🚨 <b>APEX-19 SIGNAL</b> {stars}
+🚨 <b>{header} SIGNAL</b> {stars}
 
 <b>#{s.get('rank', '?')} · Tier {s.get('tier', '?')} · Grade {s.get('grade', '?')}</b>
 Role: {s.get('role', '—')}
@@ -49,8 +59,8 @@ Direction: {emoji}
 
 Entry: <code>{s['entry']}</code>
 Stop Loss: <code>{s['sl']}</code>
-Take Profit: <code>{s['tp']}</code>
-RR: <b>{s.get('rr', 5)}</b>
+{tp_block}
+{rr_line}
 
 Research: ExpR <b>+{s.get('expr', 0):.2f}</b> · WR {s.get('wr', 0):.0f}% · N={s.get('n_research', '?')}
 OOS ExpR {oos_txt} · MaxDD {dd_txt}
@@ -96,19 +106,20 @@ def format_daily(alert_stats, trade_stats):
 
 def run_loop():
     print("=" * 64, flush=True)
-    print("  APEX-19  ·  Full Tier 1–5 S19 Portfolio", flush=True)
-    print("  T1 Flagship · T2 Core · T3 Satellite · T4 RR5 · T5 RR4", flush=True)
+    print("  APEX-19  ·  S19 Tier1–5 + S29 Fib Rejection", flush=True)
     print("=" * 64, flush=True)
     print(f"Modes loaded: {len(MODES)}", flush=True)
+    by_strat = {}
     by_tier = {}
     for m in MODES:
+        by_strat[m["strategy"]] = by_strat.get(m["strategy"], 0) + 1
         by_tier[m["tier"]] = by_tier.get(m["tier"], 0) + 1
+    print(f"By strategy: {by_strat}", flush=True)
     print(f"By tier: {by_tier}", flush=True)
     for m in MODES:
         print(
-            f"  #{m['rank']:02d} T{m['tier']} [{m['grade']:2s}] "
-            f"{m['market']:7s} {m['tf']:3s}  RR{m['rr']:g}  "
-            f"{m['preset'][:26]:26s}  ExpR+{m['expr']:.2f}",
+            f"  #{m['rank']:03d} {m['strategy']} T{m['tier']} [{m['grade']:2s}] "
+            f"{m['market']:7s} {m['tf']:3s}  {m['preset'][:28]:28s}  ExpR+{m['expr']:.2f}",
             flush=True,
         )
     print("-" * 64, flush=True)
@@ -144,12 +155,12 @@ def run_loop():
             if signals:
                 signals = select_highest_modes(signals)
                 for s in signals:
-                    key = f"{s['market']}|{s['direction']}|{s['entry']}"
+                    key = f"{s['strategy']}|{s['market']}|{s['direction']}|{s['entry']}"
                     if now - last_alert.get(key, 0) > 5400:
                         if send_alert(format_signal(s)):
                             last_alert[key] = now
                             print(
-                                f"ALERT → #{s['rank']} T{s['tier']} {s['mode']} "
+                                f"ALERT → {s['strategy']} #{s['rank']} {s['mode']} "
                                 f"{s['direction']} grade={s['grade']}",
                                 flush=True,
                             )
