@@ -89,11 +89,20 @@ def find_swing_highs_lows(high: np.ndarray, low: np.ndarray, left: int = 5, righ
 
 
 def in_session(ts, session: str) -> bool:
-    """ts can be pandas Timestamp or datetime."""
+    """ts: pandas Timestamp, datetime, or unix float seconds (UTC)."""
     if session in ("ALL", "any", None):
         return True
     try:
-        t = ts.time() if hasattr(ts, "time") else ts
+        if hasattr(ts, "time") and callable(ts.time):
+            t = ts.time()
+        elif isinstance(ts, (int, float)):
+            # unix seconds → UTC clock time
+            from datetime import datetime, timezone
+            t = datetime.fromtimestamp(float(ts), tz=timezone.utc).time()
+        elif isinstance(ts, dtime):
+            t = ts
+        else:
+            return True
     except Exception:
         return True
     if session == "overlap":
