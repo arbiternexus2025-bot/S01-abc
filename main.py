@@ -1,6 +1,7 @@
 """
-APEX-19 — S19 Tier 1–5 + S29 Fib Rejection Live Engine
-======================================================
+APEX-19 — S19 + S29 + S35 Hybrid Fib Deep Live Engine
+=====================================================
+S35: USDJPY M1 Deep 0.618–0.886 Rank1 RR3.0 / Rank2 RR2.5 (NY+Overlap)
 """
 from flask import Flask
 import time
@@ -14,12 +15,14 @@ from trade_manager import add_open_trade, check_open_trades, load_open, closed_t
 app = Flask(__name__)
 
 
+@app.route("/")
 @app.route("/health")
 def health():
     return "APEX-19 OK", 200
 
 
 SCAN = {
+    "M1": 30,    # every 30s — high frequency scalp
     "M5": 60,
     "M15": 90,
     "M30": 120,
@@ -30,23 +33,28 @@ SCAN = {
 
 def format_signal(s):
     emoji = "🟢 LONG" if s["direction"] == "LONG" else "🔴 SHORT"
-    stars = {"S": "⭐⭐⭐", "A+": "⭐⭐", "A": "⭐", "B+": "·"}.get(s.get("grade", ""), "⭐")
+    stars = {"S": "⭐⭐⭐", "A/A+": "⭐⭐⭐", "A+": "⭐⭐", "A": "⭐", "B+": "·"}.get(
+        s.get("grade", ""), "⭐"
+    )
     strat = s.get("strategy", "S19")
     oos = s.get("oos")
-    oos_txt = f"+{oos:.2f}" if isinstance(oos, (int, float)) else "—"
+    oos_txt = f"+{oos:.3f}" if isinstance(oos, (int, float)) else "—"
     dd = s.get("maxdd")
     dd_txt = f"{dd:.1f}R" if isinstance(dd, (int, float)) else "—"
     tp2 = s.get("tp2")
-    tp_block = f"Take Profit: <code>{s['tp']}</code>"
-    if tp2 is not None:
-        tp_block = (
-            f"TP1 (mid): <code>{s['tp']}</code>\n"
-            f"TP2 (opp): <code>{tp2}</code>"
-        )
-    rr_line = f"RR: <b>{s.get('rr', '—')}</b>"
-    if strat == "S29":
-        rr_line = f"RR→mid: <b>{s.get('rr', '—')}</b>  ·  Structural targets"
-    header = "APEX-19 S29" if strat == "S29" else "APEX-19 S19"
+    if strat == "S29" and tp2 is not None:
+        tp_block = f"TP1 (mid): <code>{s['tp']}</code>\nTP2 (opp): <code>{tp2}</code>"
+        rr_line = f"RR→mid: <b>{s.get('rr', '—')}</b>  ·  Structural"
+    elif strat == "S35":
+        tp_block = f"Take Profit: <code>{s['tp']}</code>  ({s.get('rr', 3)}R)"
+        sess = s.get("session") or "NY/Overlap"
+        ret = s.get("retrace")
+        ret_txt = f"{ret:.3f}" if isinstance(ret, (int, float)) else "—"
+        rr_line = f"RR: <b>{s.get('rr', 3)}</b>  ·  Session: {sess}  ·  Retrace: {ret_txt}"
+    else:
+        tp_block = f"Take Profit: <code>{s['tp']}</code>"
+        rr_line = f"RR: <b>{s.get('rr', '—')}</b>"
+    header = f"APEX-19 {strat}"
     return f"""
 🚨 <b>{header} SIGNAL</b> {stars}
 
@@ -62,7 +70,7 @@ Stop Loss: <code>{s['sl']}</code>
 {tp_block}
 {rr_line}
 
-Research: ExpR <b>+{s.get('expr', 0):.2f}</b> · WR {s.get('wr', 0):.0f}% · N={s.get('n_research', '?')}
+Research: ExpR <b>+{s.get('expr', 0):.3f}</b> · WR {s.get('wr', 0):.1f}% · N={s.get('n_research', '?')}
 OOS ExpR {oos_txt} · MaxDD {dd_txt}
 """.strip()
 
@@ -106,20 +114,18 @@ def format_daily(alert_stats, trade_stats):
 
 def run_loop():
     print("=" * 64, flush=True)
-    print("  APEX-19  ·  S19 Tier1–5 + S29 Fib Rejection", flush=True)
+    print("  APEX-19  ·  S19 + S29 + S35 Hybrid Fib Deep", flush=True)
+    print("  S35: USDJPY M1 Deep 0.618-0.886 RR3.0 / RR2.5 NY", flush=True)
     print("=" * 64, flush=True)
     print(f"Modes loaded: {len(MODES)}", flush=True)
     by_strat = {}
-    by_tier = {}
     for m in MODES:
         by_strat[m["strategy"]] = by_strat.get(m["strategy"], 0) + 1
-        by_tier[m["tier"]] = by_tier.get(m["tier"], 0) + 1
     print(f"By strategy: {by_strat}", flush=True)
-    print(f"By tier: {by_tier}", flush=True)
     for m in MODES:
         print(
-            f"  #{m['rank']:03d} {m['strategy']} T{m['tier']} [{m['grade']:2s}] "
-            f"{m['market']:7s} {m['tf']:3s}  {m['preset'][:28]:28s}  ExpR+{m['expr']:.2f}",
+            f"  #{m['rank']:03d} {m['strategy']} T{m['tier']} [{m['grade']:4s}] "
+            f"{m['market']:7s} {m['tf']:3s}  ExpR+{m['expr']:.3f}",
             flush=True,
         )
     print("-" * 64, flush=True)
@@ -156,7 +162,9 @@ def run_loop():
                 signals = select_highest_modes(signals)
                 for s in signals:
                     key = f"{s['strategy']}|{s['market']}|{s['direction']}|{s['entry']}"
-                    if now - last_alert.get(key, 0) > 5400:
+                    # M1 cooldown shorter (20 min); HTF 90 min
+                    cool = 1200 if s.get("tf") == "M1" else 5400
+                    if now - last_alert.get(key, 0) > cool:
                         if send_alert(format_signal(s)):
                             last_alert[key] = now
                             print(
@@ -175,8 +183,8 @@ def run_loop():
                 daily = {"total": 0, "by_market": {}}
                 last_daily = today
 
-            print(f"Open: {len(load_open())} | Sleep 15s", flush=True)
-            time.sleep(15)
+            print(f"Open: {len(load_open())} | Sleep 10s", flush=True)
+            time.sleep(10)
         except Exception as e:
             print(f"Loop error: {e}", flush=True)
             time.sleep(30)
