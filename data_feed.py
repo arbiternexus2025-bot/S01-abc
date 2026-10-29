@@ -12,6 +12,7 @@ SYMBOL_MAP = {
     "EURUSD": "EURUSD",
 }
 INTERVAL_MAP = {
+    "M1": "1m",
     "M5": "5m",
     "M15": "15m",
     "M30": "30m",
