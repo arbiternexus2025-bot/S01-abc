@@ -1,12 +1,12 @@
 """
-APEX-19 Strategy Runner — S19 + S29 + S35 Hybrid Fib Deep
-========================================================
+APEX-19 Strategy Runner — S19 + S29 + S40 Sweep
+===============================================
 S19: portfolio_routes Tier 1–5
-S29: Fib Major Zone rejection (H1/H4/M30)
-S35: USDJPY M1 Deep 0.618–0.886 Rank1 RR3.0 + Rank2 RR2.5 (NY/Overlap)
+S29: Fib Major Zone rejection
+S40: Liquidity Sweep detection (majors + minors + XAUUSD)
 """
 from __future__ import annotations
-from data_feed import get_ohlc
+from data_feed import get_ohlc, SYMBOL_MAP
 from S19_pattern_detection import (
     detect_with_preset as s19_detect_with_preset,
     PRESETS as S19_PRESETS,
@@ -16,10 +16,9 @@ from S29_pattern_detection import (
     detect_with_preset as s29_detect_with_preset,
     PRESETS as S29_PRESETS,
 )
-from S35_Hybrid_Fib_Deep_detection import (
-    detect_rank1,
-    detect_rank2,
-    RANK_META,
+from S40_pattern_detection import (
+    detect_with_preset as s40_detect_with_preset,
+    PRESETS as S40_PRESETS,
 )
 
 # ─────────────────────────────────────────────────────────────
@@ -43,46 +42,20 @@ S29_BOOK = [
     {"market": "USDJPY", "tf": "H1",  "preset": "JPY_H1_wick40_confirm", "variant": "wick40_confirm", "expr": 2.112, "wr": 60.5, "n": 468, "pf": 6.34, "dd": 7.0},
 ]
 
-# ─────────────────────────────────────────────────────────────
-# S35 Rank-1 / Rank-2 (USDJPY M1 Deep Fib)
-# ─────────────────────────────────────────────────────────────
-S35_BOOK = [
-    {
-        "rank_key": "RANK1",
-        "market": "USDJPY",
-        "tf": "M1",
-        "mode": "RANK1",
-        "rr": 3.0,
-        "expr": 0.541,
-        "wr": 49.5,
-        "n": 944,
-        "pf": 2.03,
-        "dd": 9.0,
-        "oos": 0.596,
-        "cost2x": 0.421,
-        "tpd": 13.9,
-        "grade": "A/A+",
-        "role": "Deep 0.618–0.886 RR3.0 NY",
-        "setup": "USDJPY M1 Deep Fib RR3.0 NY+Overlap",
-    },
-    {
-        "rank_key": "RANK2",
-        "market": "USDJPY",
-        "tf": "M1",
-        "mode": "RANK2",
-        "rr": 2.5,
-        "expr": 0.497,
-        "wr": 51.7,
-        "n": 944,
-        "pf": 1.99,
-        "dd": 10.0,
-        "oos": 0.538,
-        "cost2x": 0.377,
-        "tpd": 13.9,
-        "grade": "A",
-        "role": "Deep 0.618–0.886 RR2.5 NY",
-        "setup": "USDJPY M1 Deep Fib RR2.5 NY+Overlap",
-    },
+# All FX + XAU for S40 sweep scanning
+S40_MARKETS = [
+    "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD",
+    "EURGBP", "EURJPY", "GBPJPY", "AUDJPY", "EURAUD", "EURCHF", "GBPCHF",
+    "CADJPY", "CHFJPY", "AUDCAD", "AUDNZD", "NZDJPY",
+    "XAUUSD",
+]
+
+# H4 STRONG primary + H1 BALANCED secondary per market
+S40_TF_PRESETS = [
+    ("H4", "H4_STRONG", "S"),
+    ("H4", "H4_BALANCED", "A+"),
+    ("H1", "H1_STRONG", "A+"),
+    ("H1", "H1_BALANCED", "A"),
 ]
 
 
@@ -114,7 +87,6 @@ def _build_s19_modes():
             "maxdd": m.get("MaxDD"),
             "setup": f"{r['symbol']} {r['tf']} {preset}",
             "priority": 2000 - i,
-            "route": r.get("route", preset),
         })
     modes.sort(key=lambda x: (x["tier"], -(x["expr"] or 0)))
     for i, m in enumerate(modes, start=1):
@@ -150,50 +122,49 @@ def _build_s29_modes():
     return modes
 
 
-def _build_s35_modes():
+def _build_s40_modes():
     modes = []
-    for i, b in enumerate(S35_BOOK, start=1):
-        modes.append({
-            "rank": 50 + i,  # after S19 tier1-ish priority band
-            "tier": 0,       # flagship scalp tier
-            "role": b["role"],
-            "id": f"S35_USDJPY_M1_{b['rank_key']}",
-            "strategy": "S35",
-            "market": b["market"],
-            "tf": b["tf"],
-            "preset": b["rank_key"],
-            "mode": b["mode"],
-            "rr": b["rr"],
-            "grade": b["grade"],
-            "expr": b["expr"],
-            "wr": b["wr"],
-            "n": b["n"],
-            "oos": b["oos"],
-            "maxdd": b["dd"],
-            "pf": b["pf"],
-            "cost2x": b["cost2x"],
-            "tpd": b["tpd"],
-            "setup": b["setup"],
-            "priority": 2100 - i,  # Rank1 highest among scalps
-        })
+    rank = 200
+    for market in S40_MARKETS:
+        for tf, preset, grade in S40_TF_PRESETS:
+            rank += 1
+            # STRONG on H4 gets higher priority
+            pri = 1800 if (tf == "H4" and "STRONG" in preset) else (1700 if tf == "H4" else 1600)
+            modes.append({
+                "rank": rank,
+                "tier": 7,
+                "role": f"Sweep {preset}",
+                "id": f"S40_{market}_{tf}_{preset}",
+                "strategy": "S40",
+                "market": market,
+                "tf": tf,
+                "preset": preset,
+                "rr": None,
+                "grade": grade,
+                "expr": 0.0,
+                "wr": 0.0,
+                "n": 0,
+                "oos": None,
+                "maxdd": None,
+                "setup": f"{market} {tf} Liquidity Sweep [{preset}]",
+                "priority": pri,
+            })
     return modes
 
 
 try:
-    MODES = _build_s19_modes() + _build_s35_modes() + _build_s29_modes()
+    MODES = _build_s19_modes() + _build_s29_modes() + _build_s40_modes()
 except Exception as e:
     print(f"[APEX] mode build error: {e}", flush=True)
     MODES = []
 
-# M1 needs tighter freshness (1–2 bars = 1–2 minutes)
 FRESH = {"M1": 2, "M5": 2, "M15": 2, "M30": 2, "H1": 1, "H4": 1}
 
 
-def _stop_still_valid(s, high, low, close) -> bool:
+def _stop_still_valid_entry(entry_bar, stop, direction, high, low, close) -> bool:
     n = len(close)
-    start = getattr(s, "entry_bar", 0) + 1
-    stop = float(s.stop)
-    direction = int(s.direction)
+    start = entry_bar + 1
+    stop = float(stop)
     if direction == 1:
         for i in range(start, n):
             if low[i] <= stop:
@@ -208,7 +179,7 @@ def _stop_still_valid(s, high, low, close) -> bool:
 def _digits(market: str) -> int:
     if market == "XAUUSD":
         return 2
-    if market == "USDJPY":
+    if "JPY" in market:
         return 3
     return 5
 
@@ -216,41 +187,23 @@ def _digits(market: str) -> int:
 def _pack_s19(mode, s, bars_ago):
     d = _digits(mode["market"])
     entry = float(s.entry_price)
-    rr = float(mode.get("rr") or getattr(s, "rr", 2.5))
-    risk = abs(entry - float(s.stop))
-    if risk < 1e-12:
-        risk = abs(float(getattr(s, "risk", 0))) or 1e-9
+    rr = float(mode.get("rr") or 2.5)
+    risk = abs(entry - float(s.stop)) or 1e-9
     if s.direction == 1:
         sl, tp = float(s.stop), entry + rr * risk
     else:
         sl, tp = float(s.stop), entry - rr * risk
     return {
         "direction": "LONG" if s.direction == 1 else "SHORT",
-        "mode": mode["id"],
-        "rank": mode["rank"],
-        "tier": mode["tier"],
-        "role": mode["role"],
-        "grade": mode["grade"],
-        "strategy": "S19",
-        "market": mode["market"],
-        "tf": mode["tf"],
-        "preset": mode["preset"],
+        "mode": mode["id"], "rank": mode["rank"], "tier": mode["tier"],
+        "role": mode["role"], "grade": mode["grade"], "strategy": "S19",
+        "market": mode["market"], "tf": mode["tf"], "preset": mode["preset"],
         "setup": mode["setup"],
-        "entry": round(entry, d),
-        "sl": round(sl, d),
-        "tp": round(tp, d),
-        "tp2": None,
-        "risk": risk,
-        "rr": rr,
-        "bars_ago": bars_ago,
-        "priority": mode["priority"],
-        "expr": mode["expr"],
-        "wr": mode["wr"],
-        "n_research": mode["n"],
-        "oos": mode.get("oos"),
-        "maxdd": mode.get("maxdd"),
-        "poi_type": getattr(s, "poi_type", "OB"),
-        "bias": getattr(s, "bias", ""),
+        "entry": round(entry, d), "sl": round(sl, d), "tp": round(tp, d),
+        "tp2": None, "risk": risk, "rr": rr, "bars_ago": bars_ago,
+        "priority": mode["priority"], "expr": mode["expr"], "wr": mode["wr"],
+        "n_research": mode["n"], "oos": mode.get("oos"), "maxdd": mode.get("maxdd"),
+        "poi_type": getattr(s, "poi_type", "OB"), "bias": getattr(s, "bias", ""),
     }
 
 
@@ -264,84 +217,48 @@ def _pack_s29(mode, s, bars_ago):
     rr = float(getattr(s, "rr_to_mid", abs(tp - entry) / risk))
     return {
         "direction": "LONG" if s.direction == 1 else "SHORT",
-        "mode": mode["id"],
-        "rank": mode["rank"],
-        "tier": mode["tier"],
-        "role": mode["role"],
-        "grade": mode["grade"],
-        "strategy": "S29",
-        "market": mode["market"],
-        "tf": mode["tf"],
-        "preset": mode["preset"],
+        "mode": mode["id"], "rank": mode["rank"], "tier": mode["tier"],
+        "role": mode["role"], "grade": mode["grade"], "strategy": "S29",
+        "market": mode["market"], "tf": mode["tf"], "preset": mode["preset"],
         "setup": mode["setup"],
-        "entry": round(entry, d),
-        "sl": round(sl, d),
-        "tp": round(tp, d),
-        "tp2": round(tp2, d),
-        "risk": risk,
-        "rr": round(rr, 2),
-        "bars_ago": bars_ago,
-        "priority": mode["priority"],
-        "expr": mode["expr"],
-        "wr": mode["wr"],
-        "n_research": mode["n"],
-        "oos": None,
-        "maxdd": mode.get("maxdd"),
-        "pf": mode.get("pf"),
-        "poi_type": getattr(s, "zone_type", "maj"),
-        "bias": "",
+        "entry": round(entry, d), "sl": round(sl, d), "tp": round(tp, d),
+        "tp2": round(tp2, d), "risk": risk, "rr": round(rr, 2),
+        "bars_ago": bars_ago, "priority": mode["priority"],
+        "expr": mode["expr"], "wr": mode["wr"], "n_research": mode["n"],
+        "oos": None, "maxdd": mode.get("maxdd"), "pf": mode.get("pf"),
+        "poi_type": getattr(s, "zone_type", "maj"), "bias": "",
         "variant": mode.get("variant", ""),
     }
 
 
-def _pack_s35(mode, s, bars_ago):
+def _pack_s40(mode, s, bars_ago):
     d = _digits(mode["market"])
-    entry = float(s.entry_price)
-    sl = float(s.stop)
-    risk = abs(entry - sl) or float(s.risk) or 1e-9
-    # Prefer rank-specific target
-    if mode["mode"] == "RANK1":
-        tp = float(s.target_r30) if s.target_r30 is not None else entry + (1 if s.direction == 1 else -1) * 3.0 * risk
-        rr = 3.0
-    else:
-        tp = float(s.target_r25) if s.target_r25 is not None else entry + (1 if s.direction == 1 else -1) * 2.5 * risk
-        rr = 2.5
-    # secondary target for BOTH-style display
-    tp2 = None
-    if s.target_r30 is not None and s.target_r25 is not None and mode["mode"] == "RANK1":
-        tp2 = float(s.target_r25)  # optional secondary
     return {
         "direction": "LONG" if s.direction == 1 else "SHORT",
-        "mode": mode["id"],
-        "rank": mode["rank"],
-        "tier": mode["tier"],
-        "role": mode["role"],
-        "grade": mode["grade"],
-        "strategy": "S35",
-        "market": mode["market"],
-        "tf": mode["tf"],
-        "preset": mode["preset"],
+        "mode": mode["id"], "rank": mode["rank"], "tier": mode["tier"],
+        "role": mode["role"], "grade": mode["grade"], "strategy": "S40",
+        "market": mode["market"], "tf": mode["tf"], "preset": mode["preset"],
         "setup": mode["setup"],
-        "entry": round(entry, d),
-        "sl": round(sl, d),
-        "tp": round(tp, d),
-        "tp2": round(tp2, d) if tp2 is not None else None,
-        "risk": risk,
-        "rr": rr,
+        "entry": round(float(s.entry), d),
+        "sl": round(float(s.stop), d),
+        "tp": None,  # pure sweep alert — no fixed TP
+        "tp2": None,
+        "level": round(float(s.level), d),
+        "extreme": round(float(s.extreme), d),
+        "risk": abs(float(s.entry) - float(s.stop)),
+        "rr": None,
         "bars_ago": bars_ago,
         "priority": mode["priority"],
-        "expr": mode["expr"],
-        "wr": mode["wr"],
-        "n_research": mode["n"],
-        "oos": mode.get("oos"),
-        "maxdd": mode.get("maxdd"),
-        "pf": mode.get("pf"),
-        "cost2x": mode.get("cost2x"),
-        "tpd": mode.get("tpd"),
-        "session": getattr(s, "session", ""),
-        "retrace": round(float(getattr(s, "retrace", 0)), 3),
-        "poi_type": "DeepFib",
-        "bias": "",
+        "expr": 0.0, "wr": 0.0, "n_research": 0,
+        "oos": None, "maxdd": None,
+        "wick_atr": round(float(s.wick_atr), 2),
+        "body_atr": round(float(s.body_atr), 2),
+        "range_atr": round(float(s.range_atr), 2),
+        "is_rejection": bool(s.is_rejection),
+        "strong": bool(s.strong),
+        "session": s.session or "",
+        "poi_type": "SWEEP",
+        "bias": "bullish" if s.direction == 1 else "bearish",
     }
 
 
@@ -360,10 +277,9 @@ def run_s19(mode, ohlc):
         return None, "no_signal"
     s = signals[-1]
     bars_ago = n - 1 - s.entry_bar
-    max_age = FRESH.get(mode["tf"], 2)
-    if bars_ago > max_age:
-        return None, f"expired_or_old (bars_ago={bars_ago} max={max_age})"
-    if not _stop_still_valid(s, high, low, close):
+    if bars_ago > FRESH.get(mode["tf"], 2):
+        return None, f"expired_or_old (bars_ago={bars_ago})"
+    if not _stop_still_valid_entry(s.entry_bar, s.stop, s.direction, high, low, close):
         return None, "stop_already_hit"
     return _pack_s19(mode, s, bars_ago), "ok"
 
@@ -383,37 +299,31 @@ def run_s29(mode, ohlc):
         return None, "no_signal"
     s = max(signals, key=lambda x: x.entry_bar)
     bars_ago = n - 1 - s.entry_bar
-    max_age = FRESH.get(mode["tf"], 2)
-    if bars_ago > max_age:
-        return None, f"expired_or_old (bars_ago={bars_ago} max={max_age})"
-    if not _stop_still_valid(s, high, low, close):
+    if bars_ago > FRESH.get(mode["tf"], 2):
+        return None, f"expired_or_old (bars_ago={bars_ago})"
+    if not _stop_still_valid_entry(s.entry_bar, s.stop, s.direction, high, low, close):
         return None, "stop_already_hit"
     return _pack_s29(mode, s, bars_ago), "ok"
 
 
-def run_s35(mode, ohlc):
+def run_s40(mode, ohlc):
     high, low, open_, close = ohlc["high"], ohlc["low"], ohlc["open"], ohlc["close"]
     times = ohlc.get("time")
     n = len(close)
-    if n < 120:
-        return None, "no_data"
+    preset = mode["preset"]
+    if preset not in S40_PRESETS:
+        return None, f"bad_preset({preset})"
     try:
-        if mode["mode"] == "RANK1":
-            signals = detect_rank1(high, low, close, open_, times)
-        else:
-            signals = detect_rank2(high, low, close, open_, times)
+        signals = s40_detect_with_preset(high, low, open_, close, times=times, preset=preset)
     except Exception as e:
         return None, f"detect_error({e})"
     if not signals:
         return None, "no_signal"
-    s = max(signals, key=lambda x: x.entry_bar)
-    bars_ago = n - 1 - s.entry_bar
-    max_age = FRESH.get("M1", 2)
-    if bars_ago > max_age:
-        return None, f"expired_or_old (bars_ago={bars_ago} max={max_age})"
-    if not _stop_still_valid(s, high, low, close):
-        return None, "stop_already_hit"
-    return _pack_s35(mode, s, bars_ago), "ok"
+    s = max(signals, key=lambda x: x.bar)
+    bars_ago = n - 1 - s.bar
+    if bars_ago > FRESH.get(mode["tf"], 2):
+        return None, f"expired_or_old (bars_ago={bars_ago})"
+    return _pack_s40(mode, s, bars_ago), "ok"
 
 
 def check_modes(modes, get_ohlc_func):
@@ -425,25 +335,20 @@ def check_modes(modes, get_ohlc_func):
 
     for mode in modes:
         tag = (
-            f"#{mode['rank']:03d} {mode['strategy']} T{mode['tier']} [{mode['grade']}] "
+            f"#{mode['rank']:03d} {mode['strategy']} [{mode['grade']}] "
             f"{mode['market']} {mode['tf']}"
         )
-        print(f"  → {tag}  {mode.get('preset', mode.get('mode', ''))}", flush=True)
+        print(f"  → {tag}  {mode.get('preset', '')}", flush=True)
         try:
-            # M1 needs deeper history for pivots
-            limit = 800 if mode["tf"] == "M1" else 300
-            ohlc = get_ohlc_func(mode["market"], mode["tf"]) if mode["tf"] != "M1" else get_ohlc(mode["market"], "M1", limit=limit)
-            # allow override when get_ohlc_func is bound without limit
-            if mode["tf"] == "M1" and (ohlc is None or len(ohlc.get("close", [])) < 120):
-                ohlc = get_ohlc(mode["market"], "M1", limit=800)
+            ohlc = get_ohlc_func(mode["market"], mode["tf"])
             if ohlc is None or len(ohlc["close"]) < 80:
                 print("     ✗ [no_data]", flush=True)
                 bump("no_data")
                 continue
             if "open" not in ohlc:
                 ohlc["open"] = ohlc["close"]
-            if mode["strategy"] == "S35":
-                sig, reason = run_s35(mode, ohlc)
+            if mode["strategy"] == "S40":
+                sig, reason = run_s40(mode, ohlc)
             elif mode["strategy"] == "S29":
                 sig, reason = run_s29(mode, ohlc)
             else:
@@ -453,13 +358,20 @@ def check_modes(modes, get_ohlc_func):
             if sig is None:
                 print(f"     ✗ [{reason}]", flush=True)
                 continue
-            extra = f" TP2={sig['tp2']}" if sig.get("tp2") else ""
-            print(
-                f"     ★ {sig['strategy']} {sig['direction']} @ {sig['entry']}  "
-                f"SL={sig['sl']} TP={sig['tp']}{extra}  RR={sig.get('rr')}  "
-                f"bars_ago={sig['bars_ago']}  grade={sig['grade']}",
-                flush=True,
-            )
+            if sig["strategy"] == "S40":
+                print(
+                    f"     ★ S40 SWEEP {sig['direction']} level={sig['level']} "
+                    f"ext={sig['extreme']} wick={sig['wick_atr']}ATR "
+                    f"bars_ago={sig['bars_ago']} sess={sig.get('session','')}",
+                    flush=True,
+                )
+            else:
+                extra = f" TP2={sig['tp2']}" if sig.get("tp2") else ""
+                print(
+                    f"     ★ {sig['strategy']} {sig['direction']} @ {sig['entry']}  "
+                    f"SL={sig['sl']} TP={sig.get('tp')}{extra}  bars_ago={sig['bars_ago']}",
+                    flush=True,
+                )
             results.append(sig)
         except Exception as e:
             bump("error")
@@ -470,11 +382,23 @@ def check_modes(modes, get_ohlc_func):
 
 
 def select_highest_modes(signals):
+    """
+    Dedup rules
+    -----------
+    S40: same market + direction → ONE alert.
+         Prefer H4 over H1, then STRONG over BALANCED (priority field).
+         H1 and H4 both firing on the same sweep idea = keep H4 only.
+    Others: same strategy + market + direction + entry → highest priority.
+    """
     if not signals:
         return []
     groups = {}
     for s in signals:
-        key = f"{s['strategy']}|{s['market']}|{s['direction']}|{s['entry']}"
+        if s["strategy"] == "S40":
+            # Collapse H1 + H4 (+ Strong/Balanced) into one per market/direction
+            key = f"S40|{s['market']}|{s['direction']}"
+        else:
+            key = f"{s['strategy']}|{s['market']}|{s['direction']}|{s['entry']}"
         if key not in groups or s["priority"] > groups[key]["priority"]:
             groups[key] = s
     selected = list(groups.values())
