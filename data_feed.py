@@ -3,14 +3,30 @@ import requests
 import numpy as np
 from datetime import datetime
 
+# Majors + minors + gold (symbols that fail simply return no_data)
 SYMBOL_MAP = {
     "XAUUSD": "XAUUSD",
+    "EURUSD": "EURUSD",
     "GBPUSD": "GBPUSD",
     "USDJPY": "USDJPY",
-    "USDCAD": "USDCAD",
     "USDCHF": "USDCHF",
-    "EURUSD": "EURUSD",
+    "USDCAD": "USDCAD",
+    "AUDUSD": "AUDUSD",
+    "NZDUSD": "NZDUSD",
+    "EURGBP": "EURGBP",
+    "EURJPY": "EURJPY",
+    "GBPJPY": "GBPJPY",
+    "AUDJPY": "AUDJPY",
+    "EURAUD": "EURAUD",
+    "EURCHF": "EURCHF",
+    "GBPCHF": "GBPCHF",
+    "CADJPY": "CADJPY",
+    "CHFJPY": "CHFJPY",
+    "AUDCAD": "AUDCAD",
+    "AUDNZD": "AUDNZD",
+    "NZDJPY": "NZDJPY",
 }
+
 INTERVAL_MAP = {
     "M1": "1m",
     "M5": "5m",
