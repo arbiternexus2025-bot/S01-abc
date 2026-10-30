@@ -1,7 +1,7 @@
 """
-APEX-19 — S19 + S29 + S35 Hybrid Fib Deep Live Engine
+APEX-19 — S19 + S29 + S40 Liquidity Sweep Live Engine
 =====================================================
-S35: USDJPY M1 Deep 0.618–0.886 Rank1 RR3.0 / Rank2 RR2.5 (NY+Overlap)
+S40: Pure sweep alerts across majors, minors, and XAUUSD (H1/H4)
 """
 from flask import Flask
 import time
@@ -22,7 +22,6 @@ def health():
 
 
 SCAN = {
-    "M1": 30,    # every 30s — high frequency scalp
     "M5": 60,
     "M15": 90,
     "M30": 120,
@@ -37,6 +36,32 @@ def format_signal(s):
         s.get("grade", ""), "⭐"
     )
     strat = s.get("strategy", "S19")
+
+    if strat == "S40":
+        what = (
+            "Pivot LOW swept — bullish liquidity grab"
+            if s["direction"] == "LONG"
+            else "Pivot HIGH swept — bearish liquidity grab"
+        )
+        return f"""
+🚨 <b>APEX-19 S40 SWEEP</b> {stars}
+
+<b>{s['market']} {s['tf']}</b> · {s.get('preset', '')}
+Direction bias: {emoji}
+{what}
+
+Swept level: <code>{s.get('level')}</code>
+Extreme: <code>{s.get('extreme')}</code>
+Close: <code>{s['entry']}</code>
+Stop ref: <code>{s['sl']}</code>
+
+Wick: <b>{s.get('wick_atr', '?')} ATR</b> · Range: {s.get('range_atr', '?')} ATR
+Rejection: {"YES" if s.get("is_rejection") else "NO"} · Strong: {"YES" if s.get("strong") else "NO"}
+Session: {s.get("session") or "—"}
+
+Mode: <code>{s['mode']}</code>
+""".strip()
+
     oos = s.get("oos")
     oos_txt = f"+{oos:.3f}" if isinstance(oos, (int, float)) else "—"
     dd = s.get("maxdd")
@@ -44,24 +69,18 @@ def format_signal(s):
     tp2 = s.get("tp2")
     if strat == "S29" and tp2 is not None:
         tp_block = f"TP1 (mid): <code>{s['tp']}</code>\nTP2 (opp): <code>{tp2}</code>"
-        rr_line = f"RR→mid: <b>{s.get('rr', '—')}</b>  ·  Structural"
-    elif strat == "S35":
-        tp_block = f"Take Profit: <code>{s['tp']}</code>  ({s.get('rr', 3)}R)"
-        sess = s.get("session") or "NY/Overlap"
-        ret = s.get("retrace")
-        ret_txt = f"{ret:.3f}" if isinstance(ret, (int, float)) else "—"
-        rr_line = f"RR: <b>{s.get('rr', 3)}</b>  ·  Session: {sess}  ·  Retrace: {ret_txt}"
+        rr_line = f"RR→mid: <b>{s.get('rr', '—')}</b>"
     else:
-        tp_block = f"Take Profit: <code>{s['tp']}</code>"
+        tp_block = f"Take Profit: <code>{s.get('tp')}</code>"
         rr_line = f"RR: <b>{s.get('rr', '—')}</b>"
-    header = f"APEX-19 {strat}"
+
     return f"""
-🚨 <b>{header} SIGNAL</b> {stars}
+🚨 <b>APEX-19 {strat} SIGNAL</b> {stars}
 
 <b>#{s.get('rank', '?')} · Tier {s.get('tier', '?')} · Grade {s.get('grade', '?')}</b>
 Role: {s.get('role', '—')}
 Mode: <code>{s['mode']}</code>
-Setup: {s.get('setup', s.get('preset', ''))}
+Setup: {s.get('setup', '')}
 Market: <b>{s['market']} {s['tf']}</b>
 Direction: {emoji}
 
@@ -114,20 +133,17 @@ def format_daily(alert_stats, trade_stats):
 
 def run_loop():
     print("=" * 64, flush=True)
-    print("  APEX-19  ·  S19 + S29 + S35 Hybrid Fib Deep", flush=True)
-    print("  S35: USDJPY M1 Deep 0.618-0.886 RR3.0 / RR2.5 NY", flush=True)
+    print("  APEX-19  ·  S19 + S29 + S40 Liquidity Sweep", flush=True)
+    print("  S40: majors + minors + XAUUSD  |  H4/H1 sweep alerts", flush=True)
     print("=" * 64, flush=True)
     print(f"Modes loaded: {len(MODES)}", flush=True)
     by_strat = {}
     for m in MODES:
         by_strat[m["strategy"]] = by_strat.get(m["strategy"], 0) + 1
     print(f"By strategy: {by_strat}", flush=True)
-    for m in MODES:
-        print(
-            f"  #{m['rank']:03d} {m['strategy']} T{m['tier']} [{m['grade']:4s}] "
-            f"{m['market']:7s} {m['tf']:3s}  ExpR+{m['expr']:.3f}",
-            flush=True,
-        )
+    s40 = [m for m in MODES if m["strategy"] == "S40"]
+    markets = sorted({m["market"] for m in s40})
+    print(f"S40 markets ({len(markets)}): {', '.join(markets)}", flush=True)
     print("-" * 64, flush=True)
 
     last_alert = {}
@@ -150,7 +166,7 @@ def run_loop():
             signals = []
             for tf, modes in by_tf.items():
                 interval = SCAN.get(tf, 180)
-                if now - last_scan[tf] >= interval:
+                if now - last_scan.get(tf, 0) >= interval:
                     print(
                         f"\n[{tf}] {utc.strftime('%Y-%m-%d %H:%M')} UTC  ({len(modes)} modes)",
                         flush=True,
@@ -161,18 +177,21 @@ def run_loop():
             if signals:
                 signals = select_highest_modes(signals)
                 for s in signals:
-                    key = f"{s['strategy']}|{s['market']}|{s['direction']}|{s['entry']}"
-                    # M1 cooldown shorter (20 min); HTF 90 min
-                    cool = 1200 if s.get("tf") == "M1" else 5400
+                    if s["strategy"] == "S40":
+                        key = f"S40|{s['market']}|{s['direction']}|{s.get('level')}"
+                    else:
+                        key = f"{s['strategy']}|{s['market']}|{s['direction']}|{s['entry']}"
+                    cool = 5400  # 90 min
                     if now - last_alert.get(key, 0) > cool:
                         if send_alert(format_signal(s)):
                             last_alert[key] = now
                             print(
-                                f"ALERT → {s['strategy']} #{s['rank']} {s['mode']} "
-                                f"{s['direction']} grade={s['grade']}",
+                                f"ALERT → {s['strategy']} {s['mode']} {s['direction']}",
                                 flush=True,
                             )
-                            add_open_trade(s)
+                            # Only track SL/TP for non-S40 (S40 is informational sweep)
+                            if s["strategy"] != "S40" and s.get("tp") is not None:
+                                add_open_trade(s)
                             daily["total"] += 1
                             daily["by_market"][s["market"]] = (
                                 daily["by_market"].get(s["market"], 0) + 1
@@ -183,8 +202,8 @@ def run_loop():
                 daily = {"total": 0, "by_market": {}}
                 last_daily = today
 
-            print(f"Open: {len(load_open())} | Sleep 10s", flush=True)
-            time.sleep(10)
+            print(f"Open: {len(load_open())} | Sleep 15s", flush=True)
+            time.sleep(15)
         except Exception as e:
             print(f"Loop error: {e}", flush=True)
             time.sleep(30)
