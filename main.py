@@ -1,7 +1,7 @@
 """
-APEX-19 — S19 + S29 + S40 Liquidity Sweep Live Engine
-=====================================================
-S40: Pure sweep alerts across majors, minors, and XAUUSD (H1/H4)
+APEX-19 — S19 + S29 + S40 Sweep v2 Live Engine
+==============================================
+S40: fresh sweeps only · no H1/H4 duplicates · STRONG quality filter
 """
 from flask import Flask
 import time
@@ -29,12 +29,14 @@ SCAN = {
     "H4": 300,
 }
 
+# Cooldown after an S40 alert for same market+direction (seconds)
+S40_COOLDOWN = 4 * 3600   # 4 hours — covers one H4 bar fully
+OTHER_COOLDOWN = 90 * 60  # 90 min
+
 
 def format_signal(s):
     emoji = "🟢 LONG" if s["direction"] == "LONG" else "🔴 SHORT"
-    stars = {"S": "⭐⭐⭐", "A/A+": "⭐⭐⭐", "A+": "⭐⭐", "A": "⭐", "B+": "·"}.get(
-        s.get("grade", ""), "⭐"
-    )
+    stars = {"S": "⭐⭐⭐", "A+": "⭐⭐", "A": "⭐", "B+": "·"}.get(s.get("grade", ""), "⭐")
     strat = s.get("strategy", "S19")
 
     if strat == "S40":
@@ -47,7 +49,7 @@ def format_signal(s):
 🚨 <b>APEX-19 S40 SWEEP</b> {stars}
 
 <b>{s['market']} {s['tf']}</b> · {s.get('preset', '')}
-Direction bias: {emoji}
+Bias: {emoji}
 {what}
 
 Swept level: <code>{s.get('level')}</code>
@@ -56,8 +58,9 @@ Close: <code>{s['entry']}</code>
 Stop ref: <code>{s['sl']}</code>
 
 Wick: <b>{s.get('wick_atr', '?')} ATR</b> · Range: {s.get('range_atr', '?')} ATR
+Quality: {s.get('quality', '—')} · Pivot age: {s.get('pivot_age', '—')} bars
 Rejection: {"YES" if s.get("is_rejection") else "NO"} · Strong: {"YES" if s.get("strong") else "NO"}
-Session: {s.get("session") or "—"}
+Session: {s.get("session") or "—"} · Freshness: {s.get("bars_ago", "?")} bar(s) ago
 
 Mode: <code>{s['mode']}</code>
 """.strip()
@@ -100,7 +103,6 @@ def format_closed(t):
 {icon}
 
 Mode: <b>{t['mode']}</b>
-Grade: {t.get('grade', '—')} · Rank #{t.get('rank', '—')}
 Market: <b>{t['market']} {t['tf']}</b>
 Direction: {t['direction']}
 
@@ -133,8 +135,8 @@ def format_daily(alert_stats, trade_stats):
 
 def run_loop():
     print("=" * 64, flush=True)
-    print("  APEX-19  ·  S19 + S29 + S40 Liquidity Sweep", flush=True)
-    print("  S40: majors + minors + XAUUSD  |  H4/H1 sweep alerts", flush=True)
+    print("  APEX-19  ·  S19 + S29 + S40 Sweep v2", flush=True)
+    print("  S40: STRONG only · freshness≤1 bar · no H1/H4 dupes", flush=True)
     print("=" * 64, flush=True)
     print(f"Modes loaded: {len(MODES)}", flush=True)
     by_strat = {}
@@ -144,10 +146,11 @@ def run_loop():
     s40 = [m for m in MODES if m["strategy"] == "S40"]
     markets = sorted({m["market"] for m in s40})
     print(f"S40 markets ({len(markets)}): {', '.join(markets)}", flush=True)
+    print(f"S40 modes: {len(s40)} (H4_STRONG + H1_STRONG only)", flush=True)
     print("-" * 64, flush=True)
 
     last_alert = {}
-    last_scan = {tf: 0 for tf in SCAN}
+    last_scan = {}
     last_daily = None
     daily = {"total": 0, "by_market": {}}
     by_tf = {}
@@ -178,10 +181,12 @@ def run_loop():
                 signals = select_highest_modes(signals)
                 for s in signals:
                     if s["strategy"] == "S40":
-                        key = f"S40|{s['market']}|{s['direction']}|{s.get('level')}"
+                        key = f"S40|{s['market']}|{s['direction']}"
+                        cool = S40_COOLDOWN
                     else:
                         key = f"{s['strategy']}|{s['market']}|{s['direction']}|{s['entry']}"
-                    cool = 5400  # 90 min
+                        cool = OTHER_COOLDOWN
+
                     if now - last_alert.get(key, 0) > cool:
                         if send_alert(format_signal(s)):
                             last_alert[key] = now
@@ -189,13 +194,18 @@ def run_loop():
                                 f"ALERT → {s['strategy']} {s['mode']} {s['direction']}",
                                 flush=True,
                             )
-                            # Only track SL/TP for non-S40 (S40 is informational sweep)
                             if s["strategy"] != "S40" and s.get("tp") is not None:
                                 add_open_trade(s)
                             daily["total"] += 1
                             daily["by_market"][s["market"]] = (
                                 daily["by_market"].get(s["market"], 0) + 1
                             )
+                    else:
+                        remain = int(cool - (now - last_alert.get(key, 0)))
+                        print(
+                            f"  skip dupe/cooldown {key} ({remain}s left)",
+                            flush=True,
+                        )
 
             if utc.hour >= 21 and last_daily != today:
                 send_alert(format_daily(daily, closed_today_stats()))
