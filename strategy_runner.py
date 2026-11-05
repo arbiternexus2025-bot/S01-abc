@@ -1,12 +1,8 @@
 """
-APEX-19 Strategy Runner — S19 + S29 + S40 Sweep v2
-==================================================
-S40 upgrades:
-  • Strict freshness (H4 ≤1 bar, H1 ≤1 bar)
-  • One alert per market+direction (H4 preferred over H1)
-  • STRONG presets only in live book (less noise)
-  • Quality-ranked latest sweep
-  • In-detector level de-dupe
+APEX-19 Strategy Runner — S-tier only (S19 + S29) + S40 MSS v4
+==============================================================
+S19 / S29: grade S only
+S40: HTF key level → Sweep → MSS (v4 refined, strong only)
 """
 from __future__ import annotations
 from data_feed import get_ohlc
@@ -19,13 +15,10 @@ from S29_pattern_detection import (
     detect_with_preset as s29_detect_with_preset,
     PRESETS as S29_PRESETS,
 )
-from S40_pattern_detection import (
-    detect_with_preset as s40_detect_with_preset,
-    PRESETS as S40_PRESETS,
-)
+from S40_MSS_detection_v4_refined import detect_live, HTF_MAP, PARAMS
 
 # ─────────────────────────────────────────────────────────────
-# S29 curated book
+# S29 — S-tier only (ExpR ≥ 2.5)
 # ─────────────────────────────────────────────────────────────
 S29_BOOK = [
     {"market": "XAUUSD", "tf": "H1",  "preset": "XAU_H1_highWR_combo",   "variant": "highWR_combo",   "expr": 2.789, "wr": 60.3, "n": 411, "pf": 8.03, "dd": 10.0},
@@ -35,47 +28,34 @@ S29_BOOK = [
     {"market": "XAUUSD", "tf": "H4",  "preset": "XAU_H4_highWR_combo",   "variant": "highWR_combo",   "expr": 2.640, "wr": 55.3, "n": 94,  "pf": 6.91, "dd": 8.0},
     {"market": "XAUUSD", "tf": "H1",  "preset": "XAU_H1_wick40_confirm", "variant": "wick40_confirm", "expr": 2.621, "wr": 65.2, "n": 563, "pf": 8.53, "dd": 6.0},
     {"market": "USDJPY", "tf": "H4",  "preset": "JPY_H4_wick40_confirm", "variant": "wick40_confirm", "expr": 2.567, "wr": 61.1, "n": 149, "pf": 7.59, "dd": 5.0},
-    {"market": "XAUUSD", "tf": "M30", "preset": "XAU_M30_highWR_combo",  "variant": "highWR_combo",   "expr": 2.449, "wr": 58.1, "n": 454, "pf": 6.85, "dd": 7.0},
-    {"market": "GBPUSD", "tf": "H4",  "preset": "GBP_H4_wick45_confirm", "variant": "wick45_confirm", "expr": 2.392, "wr": 58.0, "n": 150, "pf": 6.69, "dd": 7.0},
-    {"market": "XAUUSD", "tf": "M30", "preset": "XAU_M30_wick40_confirm","variant": "wick40_confirm", "expr": 2.321, "wr": 62.3, "n": 608, "pf": 7.16, "dd": 8.0},
-    {"market": "XAUUSD", "tf": "M30", "preset": "XAU_M30_wick45_confirm","variant": "wick45_confirm", "expr": 2.282, "wr": 61.9, "n": 509, "pf": 6.99, "dd": 7.0},
-    {"market": "EURUSD", "tf": "H1",  "preset": "EUR_H1_wick40_confirm", "variant": "wick40_confirm", "expr": 2.192, "wr": 61.8, "n": 524, "pf": 6.74, "dd": 8.0},
-    {"market": "USDJPY", "tf": "H1",  "preset": "JPY_H1_wick45_confirm", "variant": "wick45_confirm", "expr": 2.120, "wr": 60.8, "n": 388, "pf": 6.41, "dd": 7.0},
-    {"market": "EURUSD", "tf": "H1",  "preset": "EUR_H1_wick45_confirm", "variant": "wick45_confirm", "expr": 2.108, "wr": 60.6, "n": 442, "pf": 6.36, "dd": 7.0},
-    {"market": "USDJPY", "tf": "H1",  "preset": "JPY_H1_wick40_confirm", "variant": "wick40_confirm", "expr": 2.112, "wr": 60.5, "n": 468, "pf": 6.34, "dd": 7.0},
 ]
 
-# Majors + minors + gold
+# S40 markets (research core)
 S40_MARKETS = [
+    # Majors
     "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD",
+    # Minors / crosses
     "EURGBP", "EURJPY", "GBPJPY", "AUDJPY", "EURAUD", "EURCHF", "GBPCHF",
     "CADJPY", "CHFJPY", "AUDCAD", "AUDNZD", "NZDJPY",
+    # Gold
     "XAUUSD",
 ]
+# LTF charts we watch (HTF is mapped inside detector)
+S40_LTFS = ["H4", "H1", "M30", "M15", "M5"]  # full v4 stack
 
-# Production live book: STRONG only (H4 preferred via priority)
-# H1 still scanned — if only H1 fires you still get it
-S40_TF_PRESETS = [
-    ("H4", "H4_STRONG", "S", 1900),
-    ("H1", "H1_STRONG", "A+", 1700),
-]
-
-# Strict freshness — only the most recent closed bar(s)
-FRESH = {
-    "M5": 2, "M15": 2, "M30": 2,
-    "H1": 1,   # ≤ 1 H1 bar ≈ 1 hour
-    "H4": 1,   # ≤ 1 H4 bar ≈ 4 hours (must be on the latest closed H4)
-}
+FRESH = {"M5": 2, "M15": 2, "M30": 2, "H1": 1, "H4": 1}
 
 
 def _build_s19_modes():
+    """S-tier only = research Tier 1 and Tier 2."""
     modes = []
     try:
         routes = portfolio_routes()
     except Exception as e:
         print(f"[APEX] S19 portfolio_routes failed: {e}", flush=True)
         return []
-    for i, r in enumerate(routes, start=1):
+    s_routes = [r for r in routes if int(r.get("tier", 99)) <= 2]
+    for i, r in enumerate(s_routes, start=1):
         preset = r.get("preset") or r["route"]
         m = r.get("metrics") or {}
         modes.append({
@@ -83,16 +63,12 @@ def _build_s19_modes():
             "id": f"S19_T{r['tier']}_{r['symbol']}_{preset}",
             "strategy": "S19", "market": r["symbol"], "tf": r["tf"],
             "preset": preset, "rr": float(r["rr"]),
-            "grade": "S" if r["tier"] <= 2 else ("A+" if r["tier"] == 3 else ("A" if r["tier"] == 4 else "B+")),
+            "grade": "S",
             "expr": m.get("ExpR", 0), "wr": m.get("WR", 0), "n": int(m.get("N", 0)),
             "oos": m.get("OOS"), "maxdd": m.get("MaxDD"),
             "setup": f"{r['symbol']} {r['tf']} {preset}",
             "priority": 2000 - i,
         })
-    modes.sort(key=lambda x: (x["tier"], -(x["expr"] or 0)))
-    for i, m in enumerate(modes, start=1):
-        m["rank"] = i
-        m["priority"] = 2000 - i
     return modes
 
 
@@ -100,34 +76,37 @@ def _build_s29_modes():
     modes = []
     for i, b in enumerate(S29_BOOK, start=1):
         modes.append({
-            "rank": 100 + i, "tier": 6, "role": f"S29 {b['variant']}",
+            "rank": 50 + i, "tier": 1, "role": f"S29 {b['variant']}",
             "id": f"S29_{b['market']}_{b['tf']}_{b['variant']}",
             "strategy": "S29", "market": b["market"], "tf": b["tf"],
             "preset": b["preset"], "rr": None,
-            "grade": "S" if b["expr"] >= 2.5 else "A+",
+            "grade": "S",
             "expr": b["expr"], "wr": b["wr"], "n": b["n"],
             "oos": None, "maxdd": b["dd"], "pf": b["pf"],
             "setup": f"{b['market']} {b['tf']} {b['variant']}",
-            "priority": 1500 - i, "variant": b["variant"],
+            "priority": 1800 - i, "variant": b["variant"],
         })
     return modes
 
 
 def _build_s40_modes():
     modes = []
-    rank = 200
+    rank = 100
+    # Priority: H4 > H1 > M30
+    pri = {"H4": 1900, "H1": 1750, "M30": 1600, "M15": 1500, "M5": 1400}
     for market in S40_MARKETS:
-        for tf, preset, grade, pri in S40_TF_PRESETS:
+        for tf in S40_LTFS:
             rank += 1
+            htf = HTF_MAP.get(tf, "H4")
             modes.append({
-                "rank": rank, "tier": 7, "role": f"Sweep {preset}",
-                "id": f"S40_{market}_{tf}_{preset}",
-                "strategy": "S40", "market": market, "tf": tf,
-                "preset": preset, "rr": None, "grade": grade,
+                "rank": rank, "tier": 1, "role": f"Sweep→MSS ({htf}→{tf})",
+                "id": f"S40_{market}_{tf}_MSS_v4",
+                "strategy": "S40", "market": market, "tf": tf, "htf": htf,
+                "preset": "MSS_v4_STRONG", "rr": None, "grade": "S",
                 "expr": 0.0, "wr": 0.0, "n": 0,
                 "oos": None, "maxdd": None,
-                "setup": f"{market} {tf} Liquidity Sweep [{preset}]",
-                "priority": pri,
+                "setup": f"{market} {tf} HTF-Sweep + MSS [v4]",
+                "priority": pri.get(tf, 1500),
             })
     return modes
 
@@ -148,14 +127,13 @@ def _digits(market: str) -> int:
 
 
 def _stop_still_valid(entry_bar, stop, direction, high, low, close) -> bool:
-    n = len(close)
     stop = float(stop)
     if direction == 1:
-        for i in range(entry_bar + 1, n):
+        for i in range(entry_bar + 1, len(close)):
             if low[i] <= stop:
                 return False
         return float(close[-1]) > stop
-    for i in range(entry_bar + 1, n):
+    for i in range(entry_bar + 1, len(close)):
         if high[i] >= stop:
             return False
     return float(close[-1]) < stop
@@ -173,14 +151,14 @@ def _pack_s19(mode, s, bars_ago):
     return {
         "direction": "LONG" if s.direction == 1 else "SHORT",
         "mode": mode["id"], "rank": mode["rank"], "tier": mode["tier"],
-        "role": mode["role"], "grade": mode["grade"], "strategy": "S19",
+        "role": mode["role"], "grade": "S", "strategy": "S19",
         "market": mode["market"], "tf": mode["tf"], "preset": mode["preset"],
         "setup": mode["setup"],
         "entry": round(entry, d), "sl": round(sl, d), "tp": round(tp, d),
         "tp2": None, "risk": risk, "rr": rr, "bars_ago": bars_ago,
         "priority": mode["priority"], "expr": mode["expr"], "wr": mode["wr"],
         "n_research": mode["n"], "oos": mode.get("oos"), "maxdd": mode.get("maxdd"),
-        "poi_type": getattr(s, "poi_type", "OB"), "bias": getattr(s, "bias", ""),
+        "poi_type": "OB", "bias": "",
     }
 
 
@@ -193,7 +171,7 @@ def _pack_s29(mode, s, bars_ago):
     return {
         "direction": "LONG" if s.direction == 1 else "SHORT",
         "mode": mode["id"], "rank": mode["rank"], "tier": mode["tier"],
-        "role": mode["role"], "grade": mode["grade"], "strategy": "S29",
+        "role": mode["role"], "grade": "S", "strategy": "S29",
         "market": mode["market"], "tf": mode["tf"], "preset": mode["preset"],
         "setup": mode["setup"],
         "entry": round(entry, d), "sl": round(sl, d), "tp": round(tp, d),
@@ -201,40 +179,39 @@ def _pack_s29(mode, s, bars_ago):
         "bars_ago": bars_ago, "priority": mode["priority"],
         "expr": mode["expr"], "wr": mode["wr"], "n_research": mode["n"],
         "oos": None, "maxdd": mode.get("maxdd"), "pf": mode.get("pf"),
-        "poi_type": getattr(s, "zone_type", "maj"), "bias": "",
-        "variant": mode.get("variant", ""),
+        "poi_type": "maj", "bias": "", "variant": mode.get("variant", ""),
     }
 
 
-def _pack_s40(mode, s, bars_ago):
+def _pack_s40(mode, e, bars_ago):
     d = _digits(mode["market"])
     return {
-        "direction": "LONG" if s.direction == 1 else "SHORT",
+        "direction": "LONG" if e.direction == 1 else "SHORT",
         "mode": mode["id"], "rank": mode["rank"], "tier": mode["tier"],
-        "role": mode["role"], "grade": mode["grade"], "strategy": "S40",
-        "market": mode["market"], "tf": mode["tf"], "preset": mode["preset"],
-        "setup": mode["setup"],
-        "entry": round(float(s.entry), d),
-        "sl": round(float(s.stop), d),
+        "role": mode["role"], "grade": "S", "strategy": "S40",
+        "market": mode["market"], "tf": mode["tf"], "htf": mode.get("htf", e.htf),
+        "preset": mode["preset"], "setup": mode["setup"],
+        "entry": round(float(e.entry), d),
+        "sl": round(float(e.stop), d),
         "tp": None, "tp2": None,
-        "level": round(float(s.level), d),
-        "extreme": round(float(s.extreme), d),
-        "risk": abs(float(s.entry) - float(s.stop)),
+        "htf_level": round(float(e.htf_level), d),
+        "zone_low": round(float(e.htf_zone_low), d),
+        "zone_high": round(float(e.htf_zone_high), d),
+        "extreme": round(float(e.sweep_extreme), d),
+        "mss_level": round(float(e.mss_level), d),
+        "risk": abs(float(e.entry) - float(e.stop)),
         "rr": None,
         "bars_ago": bars_ago,
-        "priority": mode["priority"] + int(10 * float(getattr(s, "quality", 0))),
+        "priority": mode["priority"] + int(20 * float(e.quality)),
         "expr": 0.0, "wr": 0.0, "n_research": 0,
-        "oos": None, "maxdd": None,
-        "wick_atr": round(float(s.wick_atr), 2),
-        "body_atr": round(float(s.body_atr), 2),
-        "range_atr": round(float(s.range_atr), 2),
-        "is_rejection": bool(s.is_rejection),
-        "strong": bool(s.strong),
-        "session": s.session or "",
-        "pivot_age": int(getattr(s, "pivot_age", 0)),
-        "quality": round(float(getattr(s, "quality", 0)), 2),
-        "poi_type": "SWEEP",
-        "bias": "bullish" if s.direction == 1 else "bearish",
+        "wick_atr": round(float(e.wick_atr), 2),
+        "range_atr": round(float(e.range_atr), 2),
+        "structure_atr": round(float(e.structure_atr), 2),
+        "bars_sweep_to_mss": int(e.bars_sweep_to_mss),
+        "quality": round(float(e.quality), 2),
+        "strong": bool(e.strong),
+        "poi_type": "SWEEP_MSS",
+        "bias": "bullish" if e.direction == 1 else "bearish",
     }
 
 
@@ -282,31 +259,34 @@ def run_s29(mode, ohlc):
     return _pack_s29(mode, s, bars_ago), "ok"
 
 
-def run_s40(mode, ohlc):
-    high, low, open_, close = ohlc["high"], ohlc["low"], ohlc["open"], ohlc["close"]
-    times = ohlc.get("time")
-    n = len(close)
-    preset = mode["preset"]
-    if preset not in S40_PRESETS:
-        return None, f"bad_preset({preset})"
+def run_s40(mode, get_ohlc_func):
+    market, tf = mode["market"], mode["tf"]
+    htf = mode.get("htf") or HTF_MAP.get(tf, "H4")
+    ltf = get_ohlc_func(market, tf)
+    htf_ohlc = get_ohlc_func(market, htf)
+    if ltf is None or htf_ohlc is None:
+        return None, "no_data"
+    if "open" not in ltf:
+        ltf["open"] = ltf["close"]
+    if "open" not in htf_ohlc:
+        htf_ohlc["open"] = htf_ohlc["close"]
+    if len(ltf["close"]) < 120 or len(htf_ohlc["close"]) < 80:
+        return None, "no_data"
     try:
-        signals = s40_detect_with_preset(high, low, open_, close, times=times, preset=preset)
+        events = detect_live(ltf, htf_ohlc, symbol=market, tf=tf, strong_only=True)
     except Exception as e:
         return None, f"detect_error({e})"
-    if not signals:
+    if not events:
         return None, "no_signal"
-
-    # Only consider sweeps on the latest closed bar(s) within freshness window
-    max_age = FRESH.get(mode["tf"], 1)
-    fresh = [s for s in signals if (n - 1 - s.bar) <= max_age]
+    n = len(ltf["close"])
+    max_age = FRESH.get(tf, 1)
+    fresh = [e for e in events if (n - 1 - e.bar) <= max_age]
     if not fresh:
-        newest = max(signals, key=lambda x: x.bar)
-        return None, f"stale (bars_ago={n - 1 - newest.bar} max={max_age})"
-
-    # Best quality among fresh signals
-    s = max(fresh, key=lambda x: (x.bar, x.quality))
-    bars_ago = n - 1 - s.bar
-    return _pack_s40(mode, s, bars_ago), "ok"
+        newest = max(events, key=lambda x: x.bar)
+        return None, f"stale (bars_ago={n - 1 - newest.bar})"
+    e = max(fresh, key=lambda x: (x.bar, x.quality))
+    bars_ago = n - 1 - e.bar
+    return _pack_s40(mode, e, bars_ago), "ok"
 
 
 def check_modes(modes, get_ohlc_func):
@@ -317,23 +297,23 @@ def check_modes(modes, get_ohlc_func):
         stats[k] = stats.get(k, 0) + 1
 
     for mode in modes:
-        tag = f"#{mode['rank']:03d} {mode['strategy']} [{mode['grade']}] {mode['market']} {mode['tf']}"
+        tag = f"#{mode['rank']:03d} {mode['strategy']} [S] {mode['market']} {mode['tf']}"
         print(f"  → {tag}  {mode.get('preset', '')}", flush=True)
         try:
-            ohlc = get_ohlc_func(mode["market"], mode["tf"])
-            if ohlc is None or len(ohlc["close"]) < 80:
-                print("     ✗ [no_data]", flush=True)
-                bump("no_data")
-                continue
-            if "open" not in ohlc:
-                ohlc["open"] = ohlc["close"]
-
             if mode["strategy"] == "S40":
-                sig, reason = run_s40(mode, ohlc)
-            elif mode["strategy"] == "S29":
-                sig, reason = run_s29(mode, ohlc)
+                sig, reason = run_s40(mode, get_ohlc_func)
             else:
-                sig, reason = run_s19(mode, ohlc)
+                ohlc = get_ohlc_func(mode["market"], mode["tf"])
+                if ohlc is None or len(ohlc["close"]) < 80:
+                    print("     ✗ [no_data]", flush=True)
+                    bump("no_data")
+                    continue
+                if "open" not in ohlc:
+                    ohlc["open"] = ohlc["close"]
+                if mode["strategy"] == "S29":
+                    sig, reason = run_s29(mode, ohlc)
+                else:
+                    sig, reason = run_s19(mode, ohlc)
 
             key = reason.split()[0] if reason else "other"
             bump(key)
@@ -343,10 +323,9 @@ def check_modes(modes, get_ohlc_func):
 
             if sig["strategy"] == "S40":
                 print(
-                    f"     ★ S40 SWEEP {sig['direction']} {sig['market']} {sig['tf']} "
-                    f"lvl={sig['level']} ext={sig['extreme']} "
-                    f"wick={sig['wick_atr']}ATR q={sig.get('quality')} "
-                    f"bars_ago={sig['bars_ago']} sess={sig.get('session','')}",
+                    f"     ★ S40 MSS {sig['direction']} {sig['market']} {sig['tf']} "
+                    f"HTF={sig.get('htf_level')} MSS={sig.get('mss_level')} "
+                    f"q={sig.get('quality')} bars_ago={sig['bars_ago']}",
                     flush=True,
                 )
             else:
@@ -366,12 +345,8 @@ def check_modes(modes, get_ohlc_func):
 
 def select_highest_modes(signals):
     """
-    De-duplication
-    --------------
-    S40: ONE alert per market + direction.
-         H4 (priority 1900) beats H1 (1700).
-         Higher quality bumps priority slightly.
-    Other strategies: strategy + market + direction + entry.
+    S40: one alert per market + direction (prefer higher TF / quality).
+    Others: strategy + market + direction + entry.
     """
     if not signals:
         return []
