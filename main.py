@@ -1,7 +1,7 @@
 """
 ================================================================================
   MARIO STRIKE  |  Edge Lab Live Engine
-  Production alert system  •  WATCH + ENTRY
+  Production  •  WATCH + ENTRY  •  M30 · H1 · H2 · H4
 ================================================================================
 """
 from flask import Flask
@@ -20,15 +20,12 @@ def health():
     return "MARIO STRIKE OK", 200
 
 
-# Scan cadence (seconds)
 SCAN_EVERY = 90
-
-# Cooldown after same zone alert
 WATCH_COOLDOWN = 2 * 3600
 ENTRY_COOLDOWN = 4 * 3600
 
 
-def _fmt_price(x):
+def _fmt(x):
     return f"<code>{x}</code>"
 
 
@@ -41,49 +38,48 @@ def format_watch(s):
 
     if is_long:
         story = (
-            "Sellers swept liquidity below a low. Buyers took structure higher. "
-            "A strong demand zone is now marked. Price has <b>not</b> touched it yet."
+            "Sellers swept liquidity below a low. Buyers broke structure higher. "
+            "A demand zone is armed. Price has <b>not</b> entered it yet."
         )
         action = (
-            f"Focus only on the zone between {_fmt_price(s['poi_bot'])} and {_fmt_price(s['poi_top'])}.\n"
-            f"Wait for price to arrive and show rejection before considering a {side}."
+            f"Watch only {_fmt(s['poi_bot'])} → {_fmt(s['poi_top'])}.\n"
+            f"Wait for rejection in that zone before a {side}."
         )
-        invalid = f"Idea fails if price closes clearly under {_fmt_price(s['stop'])}."
+        invalid = f"Invalidate if price closes clearly under {_fmt(s['stop'])}."
     else:
         story = (
-            "Buyers swept liquidity above a high. Sellers took structure lower. "
-            "A strong supply zone is now marked. Price has <b>not</b> touched it yet."
+            "Buyers swept liquidity above a high. Sellers broke structure lower. "
+            "A supply zone is armed. Price has <b>not</b> entered it yet."
         )
         action = (
-            f"Focus only on the zone between {_fmt_price(s['poi_bot'])} and {_fmt_price(s['poi_top'])}.\n"
-            f"Wait for price to arrive and show rejection before considering a {side}."
+            f"Watch only {_fmt(s['poi_bot'])} → {_fmt(s['poi_top'])}.\n"
+            f"Wait for rejection in that zone before a {side}."
         )
-        invalid = f"Idea fails if price closes clearly above {_fmt_price(s['stop'])}."
+        invalid = f"Invalidate if price closes clearly above {_fmt(s['stop'])}."
 
     return f"""
 ⚡️ <b>MARIO STRIKE</b>  ·  <b>ZONE LIVE</b>
 
 ━━━━━━━━━━━━━━━━━━━━
-<b>{s['market']}</b>   ·   {s['tf']}
+<b>{s['market']}</b>   ·   <b>{s['tf']}</b>
 {colour}  <b>{arrow}</b>
 ━━━━━━━━━━━━━━━━━━━━
 
 {story}
 
 📍 <b>{zone_word} ZONE</b>
-{_fmt_price(s['poi_bot'])}  →  {_fmt_price(s['poi_top'])}
+{_fmt(s['poi_bot'])}  →  {_fmt(s['poi_top'])}
 Type: {s['poi_type']}
 
 📌 <b>PLAN (when price arrives)</b>
-• Ideal area: {_fmt_price(s['entry'])}
-• Protect below/above: {_fmt_price(s['stop'])}
-• Target idea (RR {s['rr']:.1f}): {_fmt_price(s['target'])}
+• Ideal area: {_fmt(s['entry'])}
+• Stop: {_fmt(s['stop'])}
+• Target (RR {s['rr']:.1f}): {_fmt(s['target'])}
 
-👀 <b>WHAT TO DO NOW</b>
+👀 <b>NOW</b>
 {action}
-
 {invalid}
-Window left ≈ {s['bars_left']} bars on {s['tf']}.
+Window ≈ {s['bars_left']} bars left on {s['tf']}.
 """.strip()
 
 
@@ -94,60 +90,52 @@ def format_entry(s):
     side = "BUY" if is_long else "SELL"
 
     if is_long:
-        story = (
-            "Price returned into the demand zone and printed rejection. "
-            "The setup is complete."
-        )
-        action = f"Primary focus: execute a {side} near {_fmt_price(s['entry'])}."
+        story = "Price hit the demand zone and rejected. Setup complete."
     else:
-        story = (
-            "Price returned into the supply zone and printed rejection. "
-            "The setup is complete."
-        )
-        action = f"Primary focus: execute a {side} near {_fmt_price(s['entry'])}."
+        story = "Price hit the supply zone and rejected. Setup complete."
 
     return f"""
 🎯 <b>MARIO STRIKE</b>  ·  <b>ENTRY</b>
 
 ━━━━━━━━━━━━━━━━━━━━
-<b>{s['market']}</b>   ·   {s['tf']}
+<b>{s['market']}</b>   ·   <b>{s['tf']}</b>
 {colour}  <b>{arrow}</b>
 ━━━━━━━━━━━━━━━━━━━━
 
 {story}
 
 ✅ <b>TRADE PLAN</b>
-• Entry area: {_fmt_price(s['entry'])}
-• Stop loss: {_fmt_price(s['stop'])}
-• Take profit: {_fmt_price(s['target'])}
-• Risk : Reward = 1 : {s['rr']:.1f}
+• Entry: {_fmt(s['entry'])}
+• Stop: {_fmt(s['stop'])}
+• Target: {_fmt(s['target'])}
+• R:R = 1 : {s['rr']:.1f}
 
-📍 Zone used: {_fmt_price(s['poi_bot'])} → {_fmt_price(s['poi_top'])} ({s['poi_type']})
+📍 Zone: {_fmt(s['poi_bot'])} → {_fmt(s['poi_top'])} ({s['poi_type']})
 
 🔥 <b>ACTION</b>
-{action}
-Manage risk. Do not chase if price has already run far from the zone.
+Prefer a {side} near {_fmt(s['entry'])}.
+Size risk carefully. Do not chase if price has already left the zone.
 """.strip()
 
 
 def format_alert(s):
-    if s["phase"] == "ENTRY":
-        return format_entry(s)
-    return format_watch(s)
+    return format_entry(s) if s["phase"] == "ENTRY" else format_watch(s)
 
 
 def run_loop():
     print("=" * 64, flush=True)
-    print("  MARIO STRIKE  ·  Edge Lab Live", flush=True)
-    print("  Sweep → BOS → POI → Watch → Rejection Entry", flush=True)
+    print("  ██  MARIO STRIKE  ·  EDGE LAB LIVE  ██", flush=True)
+    print("  Sweep → BOS → POI → ZONE LIVE → ENTRY", flush=True)
     print("=" * 64, flush=True)
-    print(f"Markets : {len(MARKETS)}", flush=True)
-    print(f"TFs     : {', '.join(TIMEFRAMES)}", flush=True)
-    print(f"Combos  : {len(MARKETS) * len(TIMEFRAMES)}", flush=True)
-    print("-" * 64, flush=True)
+    print(f"  Markets : {len(MARKETS)}  |  TFs : {', '.join(TIMEFRAMES)}", flush=True)
+    print(f"  Combos  : {len(MARKETS) * len(TIMEFRAMES)}", flush=True)
+    print(f"  H2      : built from H1 (biquote has no native 2h)", flush=True)
+    print(f"  Scan    : every {SCAN_EVERY}s", flush=True)
+    print("=" * 64, flush=True)
 
     last_alert = {}
     last_scan = 0.0
+    cycle = 0
 
     while True:
         try:
@@ -155,26 +143,42 @@ def run_loop():
             utc = datetime.now(timezone.utc)
 
             if now - last_scan >= SCAN_EVERY:
-                print(f"\n[SCAN] {utc.strftime('%Y-%m-%d %H:%M')} UTC", flush=True)
+                cycle += 1
+                print(f"\n{'═' * 64}", flush=True)
+                print(
+                    f"  CYCLE #{cycle}  ·  {utc.strftime('%Y-%m-%d %H:%M:%S')} UTC",
+                    flush=True,
+                )
+                print(f"{'═' * 64}", flush=True)
                 signals = check_all()
                 signals = select_best(signals)
                 last_scan = now
 
+                if not signals:
+                    print("  No actionable WATCH/ENTRY this cycle.", flush=True)
                 for s in signals:
                     cool = ENTRY_COOLDOWN if s["phase"] == "ENTRY" else WATCH_COOLDOWN
                     key = s["key"]
                     if now - last_alert.get(key, 0) > cool:
-                        msg = format_alert(s)
-                        if send_alert(msg):
+                        if send_alert(format_alert(s)):
                             last_alert[key] = now
-                            print(f"ALERT → {s['phase']} {s['direction']} {s['market']} {s['tf']}", flush=True)
+                            print(
+                                f"  ★ TELEGRAM  {s['phase']}  "
+                                f"{s['market']} {s['tf']} {s['direction']}",
+                                flush=True,
+                            )
                     else:
                         remain = int(cool - (now - last_alert.get(key, 0)))
-                        print(f"  cooldown {s['market']} {s['direction']} {remain}s", flush=True)
+                        print(
+                            f"  · cooldown  {s['market']} {s['direction']}  "
+                            f"{remain // 60}m left",
+                            flush=True,
+                        )
+                print(f"  Next scan in ~{SCAN_EVERY}s", flush=True)
 
             time.sleep(15)
         except Exception as e:
-            print(f"Loop error: {e}", flush=True)
+            print(f"  LOOP ERROR: {e}", flush=True)
             time.sleep(30)
 
 
