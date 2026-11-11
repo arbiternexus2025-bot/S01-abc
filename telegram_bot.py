@@ -15,7 +15,7 @@ def send_alert(message: str) -> bool:
     try:
         r = requests.post(
             url,
-            data={"chat_id": CHAT_ID, "text": message, "parse_mode": "HTML"},
+            data={"chat_id": CHAT_ID, "text": message, "parse_mode": "HTML", "disable_web_page_preview": True},
             timeout=12,
         )
         ok = r.status_code == 200
