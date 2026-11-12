@@ -480,11 +480,19 @@ class MarioPureDetector:
         n = len(c)
         atr_ltf = _atr(h, l, c)
 
-        # time → index map
+        def _naive(t):
+            ts = pd.Timestamp(t) if not isinstance(t, pd.Timestamp) else t
+            if getattr(ts, "tzinfo", None) is not None:
+                try:
+                    ts = ts.tz_convert("UTC").tz_localize(None)
+                except Exception:
+                    ts = ts.tz_localize(None)
+            return ts
+
+        # time → index map (all naive UTC)
         time_idx = {}
         for i, t in enumerate(times):
-            ts = pd.Timestamp(t) if not isinstance(t, pd.Timestamp) else t
-            time_idx[ts] = i
+            time_idx[_naive(t)] = i
 
         sorted_times = sorted(time_idx.keys())
         signals: List[Signal] = []
@@ -492,7 +500,7 @@ class MarioPureDetector:
         display_tf = f"{cfg.htf}→{cfg.ltf}"
 
         for poi in pois:
-            bos_ts = pd.Timestamp(poi["bos_time"])
+            bos_ts = _naive(poi["bos_time"])
             # first LTF bar at or after BOS
             start_i = None
             for t in sorted_times:
@@ -512,7 +520,7 @@ class MarioPureDetector:
             atr_h = poi["atr"]
 
             for e in range(start_i, n):
-                e_ts = pd.Timestamp(times[e])
+                e_ts = _naive(times[e])
                 if e_ts > end_ts:
                     break
                 if np.isnan(atr_ltf[e]):

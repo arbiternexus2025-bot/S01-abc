@@ -13,23 +13,27 @@ from typing import List, Optional, Dict, Any
 from Mario_Pure_detection import MarioPureDetector, DetectorConfig
 
 
+def _naive_utc(t) -> pd.Timestamp:
+    """Force tz-naive UTC so HTF/LTF timestamps always compare cleanly."""
+    try:
+        if isinstance(t, (int, float)) and float(t) > 1e9:
+            ts = pd.Timestamp(datetime.fromtimestamp(float(t), tz=timezone.utc))
+        else:
+            ts = pd.Timestamp(t)
+        if ts.tzinfo is not None:
+            ts = ts.tz_convert("UTC").tz_localize(None)
+        return ts
+    except Exception:
+        return pd.Timestamp(datetime.utcnow())
+
+
 def arrays_to_df(ohlc: dict) -> pd.DataFrame:
     n = len(ohlc["close"])
     times = ohlc.get("time")
     if times is None:
         now = datetime.now(timezone.utc).timestamp()
         times = np.array([now - (n - 1 - i) * 3600 for i in range(n)])
-    tlist = []
-    for t in times:
-        try:
-            if hasattr(t, "to_pydatetime"):
-                tlist.append(pd.Timestamp(t))
-            elif isinstance(t, (int, float)) and float(t) > 1e9:
-                tlist.append(pd.Timestamp(datetime.fromtimestamp(float(t), tz=timezone.utc)))
-            else:
-                tlist.append(pd.Timestamp(t))
-        except Exception:
-            tlist.append(pd.Timestamp(datetime.now(timezone.utc)))
+    tlist = [_naive_utc(t) for t in times]
     return pd.DataFrame({
         "Time": tlist,
         "Open": np.asarray(ohlc.get("open", ohlc["close"]), dtype=float),
