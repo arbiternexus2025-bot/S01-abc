@@ -1,13 +1,14 @@
 """
-MARIO STRIKE — Strategy Runner
-==============================
-Markets : majors + minors + gold
-TFs     : M30 · H1 · H2 · H4
-Phases  : WATCH (zone armed) → ENTRY (rejection confirmed)
+MARIO STRIKE — Dual-TF Runner (ENTRY only)
+==========================================
+Routes (research preferred):
+  H1  → M30   RR 3.5   primary (lowest latency)
+  H4  → M30   RR 4.5
+  H4  → H1    RR 4.5
 """
 from __future__ import annotations
-from data_feed import get_ohlc
-from mario_engine import scan
+from data_feed import get_ohlc, clear_cache
+from mario_engine import scan_dual
 
 MARKETS = [
     "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD",
@@ -16,115 +17,63 @@ MARKETS = [
     "XAUUSD",
 ]
 
-TIMEFRAMES = ["M30", "H1", "H2", "H4"]
-
-FRESH = {"M30": 2, "H1": 1, "H2": 1, "H4": 1}
-TF_PRI = {"H4": 400, "H2": 300, "H1": 200, "M30": 100}
-
-
-def _digits(market: str) -> int:
-    if market == "XAUUSD":
-        return 2
-    if "JPY" in market:
-        return 3
-    return 5
+# (htf, ltf, lookback_ltf_bars)
+DUAL_ROUTES = [
+    ("H1", "M30", 3),   # primary — M30 rejection on H1 POI
+    ("H4", "M30", 4),
+    ("H4", "H1", 2),
+]
 
 
-def _pack(ev) -> dict:
-    d = _digits(ev.market)
-    return {
-        "phase": ev.phase,
-        "market": ev.market,
-        "tf": ev.timeframe,
-        "direction": ev.direction,
-        "poi_type": ev.poi_type,
-        "poi_top": round(ev.poi_top, d),
-        "poi_bot": round(ev.poi_bot, d),
-        "entry": round(ev.entry, d),
-        "stop": round(ev.stop, d),
-        "target": round(ev.target, d),
-        "risk": round(ev.risk, d + 1),
-        "rr": float(ev.rr),
-        "sweep_level": round(ev.sweep_level, d),
-        "bars_ago": ev.bars_ago,
-        "bars_left": ev.bars_left,
-        "priority": TF_PRI.get(ev.timeframe, 0) + (50 if ev.phase == "ENTRY" else 0),
-        "key": ev.key(),
-    }
-
-
-def check_all(get_ohlc_func=get_ohlc):
+def check_all():
     results = []
-    stats = {
-        "ENTRY": 0,
-        "WATCH": 0,
-        "no_data": 0,
-        "no_setup": 0,
-        "stale": 0,
-        "error": 0,
-        "scanned": 0,
-    }
-
-    total = len(MARKETS) * len(TIMEFRAMES)
+    stats = {"ENTRY": 0, "no_data": 0, "no_setup": 0, "error": 0, "scanned": 0}
+    total = len(MARKETS) * len(DUAL_ROUTES)
     idx = 0
 
+    # Fresh cache each full cycle so we don't reuse stale bars across cycles
+    clear_cache()
+
     for market in MARKETS:
-        for tf in TIMEFRAMES:
+        for htf, ltf, lookback in DUAL_ROUTES:
             idx += 1
             stats["scanned"] += 1
-            tag = f"[{idx:02d}/{total}] {market:7s} {tf:3s}"
+            tag = f"[{idx:02d}/{total}] {market:7s} {htf}→{ltf}"
             try:
-                ohlc = get_ohlc_func(market, tf)
-                if ohlc is None:
-                    print(f"  {tag}  ·  NO DATA  (feed empty or pair not listed)", flush=True)
+                ohlc_htf = get_ohlc(market, htf, limit=280)
+                ohlc_ltf = get_ohlc(market, ltf, limit=320)
+                if ohlc_htf is None or ohlc_ltf is None:
+                    print(f"  {tag}  ·  NO DATA", flush=True)
                     stats["no_data"] += 1
                     continue
 
-                n_bars = len(ohlc["close"])
-                events = scan(ohlc, market, tf)
-                if not events:
+                sigs = scan_dual(ohlc_htf, ohlc_ltf, market, htf, ltf, lookback_bars=lookback)
+                if not sigs:
                     print(
-                        f"  {tag}  ·  NO SETUP  "
-                        f"({n_bars} bars — no live Sweep→BOS→POI sequence)",
+                        f"  {tag}  ·  NO ENTRY  "
+                        f"(HTF={len(ohlc_htf['close'])} LTF={len(ohlc_ltf['close'])} bars)",
                         flush=True,
                     )
                     stats["no_setup"] += 1
                     continue
 
-                max_age = FRESH.get(tf, 2)
-                kept = 0
-                for ev in events:
-                    if ev.bars_ago > max_age:
-                        print(
-                            f"  {tag}  ·  STALE {ev.phase}  "
-                            f"(bars_ago={ev.bars_ago} > max {max_age})",
-                            flush=True,
-                        )
-                        stats["stale"] += 1
-                        continue
-                    packed = _pack(ev)
-                    icon = "🎯" if ev.phase == "ENTRY" else "⚡️"
+                for s in sigs:
                     print(
-                        f"  {tag}  {icon} {ev.phase:5s}  {ev.direction:5s}  "
-                        f"zone {packed['poi_bot']}→{packed['poi_top']}  "
-                        f"RR={ev.rr}  bars_ago={ev.bars_ago}",
+                        f"  {tag}  🎯 ENTRY  {s['direction']:5s}  "
+                        f"{s['entry']}  SL {s['stop']}  TP {s['target']}  "
+                        f"RR={s['rr']}  bars_ago={s['bars_ago']}",
                         flush=True,
                     )
-                    results.append(packed)
-                    stats[ev.phase] = stats.get(ev.phase, 0) + 1
-                    kept += 1
-                if kept == 0 and events:
-                    pass  # already logged stale
+                    results.append(s)
+                    stats["ENTRY"] += 1
             except Exception as e:
                 print(f"  {tag}  ·  ERROR  {e}", flush=True)
                 stats["error"] += 1
 
     print("-" * 64, flush=True)
     print(
-        f"  SCAN SUMMARY  |  scanned={stats['scanned']}  "
-        f"ENTRY={stats['ENTRY']}  WATCH={stats['WATCH']}  "
-        f"no_setup={stats['no_setup']}  no_data={stats['no_data']}  "
-        f"stale={stats['stale']}  error={stats['error']}",
+        f"  SUMMARY  scanned={stats['scanned']}  ENTRY={stats['ENTRY']}  "
+        f"no_setup={stats['no_setup']}  no_data={stats['no_data']}  error={stats['error']}",
         flush=True,
     )
     print("-" * 64, flush=True)
@@ -132,7 +81,10 @@ def check_all(get_ohlc_func=get_ohlc):
 
 
 def select_best(signals):
-    """One alert per market+direction — prefer ENTRY and higher TF."""
+    """
+    Hard de-dupe: one ENTRY per market + direction.
+    Prefer higher priority (H4 routes > H1→M30 when both fire).
+    """
     if not signals:
         return []
     groups = {}
@@ -140,7 +92,9 @@ def select_best(signals):
         key = f"{s['market']}|{s['direction']}"
         if key not in groups or s["priority"] > groups[key]["priority"]:
             groups[key] = s
+        elif s["priority"] == groups[key]["priority"] and s["bars_ago"] < groups[key]["bars_ago"]:
+            groups[key] = s
     out = list(groups.values())
     if len(signals) != len(out):
-        print(f"  DEDUP  {len(signals)} signals → {len(out)} (best TF / phase kept)", flush=True)
+        print(f"  DEDUP  {len(signals)} → {len(out)} (1 per market+direction)", flush=True)
     return out
