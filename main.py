@@ -1,12 +1,13 @@
 """
 ================================================================================
   MARIO STRIKE  |  Edge Lab Live
-  Version 2.0.0  ·  Dual-TF  ·  ENTRY only
+  Single-TF  ·  ENTRY only  ·  Majors + XAUUSD
 ================================================================================
-Latency design:
-  • Structure on HTF (H1 / H4)
-  • Rejection on faster LTF (M30 / H1) → alert without waiting HTF close
-  • Poll every 45s + OHLC cache within cycle
+Anti-late design:
+  • detect_latest lookback: M30≤2 bars, H1/H4≤1 bar
+  • Poll every 40s
+  • OHLC cache 40s within cycle
+  • Hard dedupe per market+direction
 ================================================================================
 """
 from flask import Flask
@@ -14,7 +15,7 @@ import time
 import threading
 from datetime import datetime, timezone
 from telegram_bot import send_alert
-from strategy_runner import check_all, select_best, MARKETS, DUAL_ROUTES
+from strategy_runner import check_all, select_best, MARKETS, TIMEFRAMES
 
 app = Flask(__name__)
 
@@ -22,11 +23,11 @@ app = Flask(__name__)
 @app.route("/")
 @app.route("/health")
 def health():
-    return "MARIO STRIKE Dual-TF OK", 200
+    return "MARIO STRIKE Single OK", 200
 
 
-SCAN_EVERY = 45          # faster poll (was 90)
-ENTRY_COOLDOWN = 3 * 3600  # same zone / direction
+SCAN_EVERY = 40
+ENTRY_COOLDOWN = 3 * 3600
 
 
 def _fmt(x):
@@ -42,13 +43,13 @@ def format_entry(s):
 
     if is_long:
         story = (
-            f"Liquidity was swept on <b>{s['htf']}</b>, structure broke higher, "
-            f"and <b>{s['ltf']}</b> just rejected from the demand zone."
+            "Liquidity was swept under a low, structure broke higher, "
+            "and price rejected from the demand zone."
         )
     else:
         story = (
-            f"Liquidity was swept on <b>{s['htf']}</b>, structure broke lower, "
-            f"and <b>{s['ltf']}</b> just rejected from the supply zone."
+            "Liquidity was swept above a high, structure broke lower, "
+            "and price rejected from the supply zone."
         )
 
     return f"""
@@ -77,13 +78,14 @@ Do not chase if price has already left the zone.
 
 def run_loop():
     print("=" * 64, flush=True)
-    print("  ██  MARIO STRIKE  ·  Dual-TF v2.0.0  ██", flush=True)
-    print("  HTF structure + LTF rejection  ·  ENTRY only", flush=True)
+    print("  ██  MARIO STRIKE  ·  Single-TF ENTRY  ██", flush=True)
+    print("  Majors + XAUUSD  ·  M30 / H1 / H4", flush=True)
     print("=" * 64, flush=True)
-    print(f"  Markets : {len(MARKETS)}", flush=True)
-    print(f"  Routes  : {', '.join(f'{h}→{l}' for h,l,_ in DUAL_ROUTES)}", flush=True)
-    print(f"  Combos  : {len(MARKETS) * len(DUAL_ROUTES)}", flush=True)
+    print(f"  Markets : {', '.join(MARKETS)}", flush=True)
+    print(f"  TFs     : {', '.join(TIMEFRAMES)}", flush=True)
+    print(f"  Combos  : {len(MARKETS) * len(TIMEFRAMES)}", flush=True)
     print(f"  Poll    : every {SCAN_EVERY}s", flush=True)
+    print(f"  Fresh   : M30≤2 bars · H1/H4≤1 bar", flush=True)
     print("=" * 64, flush=True)
 
     last_alert = {}
@@ -106,7 +108,6 @@ def run_loop():
                 signals = select_best(signals)
                 elapsed = time.time() - t0
                 last_scan = now
-
                 print(f"  Cycle time: {elapsed:.1f}s", flush=True)
 
                 if not signals:
