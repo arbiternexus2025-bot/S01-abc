@@ -1,15 +1,9 @@
-"""
-MARIO STRIKE — Single-TF ENTRY engine
-=====================================
-Mario Pure v2.0.0 SINGLE mode.
-Only fresh entries (last N bars) — no WATCH, no dual.
-"""
+"""MARIO STRIKE — Single-TF ENTRY (structure)."""
 from __future__ import annotations
 import numpy as np
 import pandas as pd
 from datetime import datetime, timezone
 from typing import List
-
 from Mario_Pure_detection import MarioPureDetector, DetectorConfig
 
 
@@ -32,9 +26,8 @@ def arrays_to_df(ohlc: dict) -> pd.DataFrame:
     if times is None:
         now = datetime.now(timezone.utc).timestamp()
         times = np.array([now - (n - 1 - i) * 3600 for i in range(n)])
-    tlist = [_naive_utc(t) for t in times]
     return pd.DataFrame({
-        "Time": tlist,
+        "Time": [_naive_utc(t) for t in times],
         "Open": np.asarray(ohlc.get("open", ohlc["close"]), dtype=float),
         "High": np.asarray(ohlc["high"], dtype=float),
         "Low": np.asarray(ohlc["low"], dtype=float),
@@ -42,39 +35,29 @@ def arrays_to_df(ohlc: dict) -> pd.DataFrame:
     })
 
 
-# Max bars ago for a valid live alert (strict = less late delivery)
-LOOKBACK = {
-    "M30": 2,   # ~1 hour max
-    "H1": 1,    # current/prior H1 only
-    "H4": 1,    # current/prior H4 only
-}
-
+LOOKBACK = {"M30": 2, "H1": 1, "H4": 1}
 TF_PRI = {"H4": 300, "H1": 200, "M30": 100}
 
 
-def scan_single(ohlc: dict, market: str, tf: str) -> List[dict]:
+def scan_mario(ohlc: dict, market: str, tf: str) -> List[dict]:
     if ohlc is None or len(ohlc["close"]) < 120:
         return []
-
     df = arrays_to_df(ohlc)
     cfg = DetectorConfig().for_timeframe(tf)
-    # keep mode explicitly single
     cfg.mode = "SINGLE"
     det = MarioPureDetector(cfg)
-
     lookback = LOOKBACK.get(tf, 1)
     sigs = det.detect_latest(df, market=market, timeframe=tf, lookback_bars=lookback)
-
     n = len(df)
-    out = []
     d = 2 if market == "XAUUSD" else (3 if "JPY" in market else 5)
-
+    out = []
     for s in sigs:
         bars_ago = n - 1 - s.entry_bar
         if bars_ago > lookback:
             continue
         side = s.side
         out.append({
+            "strategy": "MARIO",
             "phase": "ENTRY",
             "mode": "SINGLE",
             "market": market,
@@ -86,11 +69,10 @@ def scan_single(ohlc: dict, market: str, tf: str) -> List[dict]:
             "entry": round(float(s.entry_price), d),
             "stop": round(float(s.stop_price), d),
             "target": round(float(s.target_price), d),
-            "risk": round(float(s.risk), d + 1),
             "rr": float(s.rr),
-            "sweep_level": round(float(s.sweep_level), d),
             "bars_ago": bars_ago,
-            "priority": TF_PRI.get(tf, 100),
-            "key": f"ENTRY|{market}|{side}|{tf}|{round(float(s.poi_bot), d)}|{round(float(s.poi_top), d)}",
+            "priority": 1000 + TF_PRI.get(tf, 100),
+            "role": f"Mario Structure {tf}",
+            "key": f"MARIO|{market}|{side}|{tf}|{round(float(s.entry_price), d)}",
         })
     return out
