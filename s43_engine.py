@@ -1,16 +1,16 @@
 """
-S43 — Parabolic SAR Trail live scanner
-======================================
+S43 — Parabolic SAR Trail live scanner (XAUUSD only)
+====================================================
 Champions:
-  H4_PURE   Best Overall
-  H1_VOL50  Best Balance
-  M5_VOL40  Best Higher-Frequency (XAU focus)
+  M5_H4_ALIGN  M5 entry + H4 PSAR align + VOL40  · Grade A
+  H1_H4_ALIGN  H1 entry + H4 PSAR align + VOL40  · Grade A
+  H4_PURE      H4 Pure (no EMA)
 """
 from __future__ import annotations
 import numpy as np
 import pandas as pd
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 
 from S43_PSAR_Trail_detection import detect_psar_signals, Mode, MODE_CONFIG
 
@@ -35,7 +35,7 @@ def arrays_to_df(ohlc: dict) -> pd.DataFrame:
         now = datetime.now(timezone.utc).timestamp()
         times = np.array([now - (n - 1 - i) * 300 for i in range(n)])
     return pd.DataFrame({
-        "Time": [_naive_utc(t) for t in times],
+        "Time": [_naive_utc(x) for x in times],
         "Open": np.asarray(ohlc.get("open", ohlc["close"]), dtype=float),
         "High": np.asarray(ohlc["high"], dtype=float),
         "Low": np.asarray(ohlc["low"], dtype=float),
@@ -43,40 +43,51 @@ def arrays_to_df(ohlc: dict) -> pd.DataFrame:
     })
 
 
-# Freshness: keep alerts tight (anti-late)
-LOOKBACK = {"H4": 1, "H1": 1, "M5": 3}
-
-# Research-facing RR reference for messaging (trail is primary exit)
-RR_REF = {"H4_PURE": 3.0, "H1_VOL50": 2.5, "M5_VOL40": 2.0}
-
-MODE_PRI = {"H4_PURE": 400, "H1_VOL50": 300, "M5_VOL40": 200}
+LOOKBACK = {"M5": 3, "H1": 1, "H4": 1}
+RR_REF = {"M5_H4_ALIGN": 2.0, "H1_H4_ALIGN": 2.5, "H4_PURE": 3.0}
+MODE_PRI = {"M5_H4_ALIGN": 500, "H1_H4_ALIGN": 450, "H4_PURE": 400}
 
 
-def scan_s43(ohlc: dict, market: str, mode: str) -> List[dict]:
-    if ohlc is None or len(ohlc["close"]) < 150:
+def scan_s43(
+    ohlc_ltf: dict,
+    market: str,
+    mode: str,
+    ohlc_htf: Optional[dict] = None,
+) -> List[dict]:
+    if ohlc_ltf is None or len(ohlc_ltf["close"]) < 150:
         return []
-    if mode not in MODE_CONFIG:
-        return []
-
-    cfg = MODE_CONFIG[Mode(mode) if not isinstance(mode, Mode) else mode]
-    tf = cfg["tf"]
-    df = arrays_to_df(ohlc)
-
-    # detect requires room for entry at i+1 — drop incomplete edge safely
     try:
-        sigs = detect_psar_signals(df, mode=mode)
+        mode_e = Mode(mode)
+    except Exception:
+        return []
+
+    cfg = MODE_CONFIG[mode_e]
+    ltf = cfg.get("ltf") or cfg.get("tf") or "H4"
+    need_htf = bool(cfg.get("htf_align"))
+
+    df_ltf = arrays_to_df(ohlc_ltf)
+    df_htf = None
+    if need_htf:
+        if ohlc_htf is None or len(ohlc_htf["close"]) < 80:
+            return []
+        df_htf = arrays_to_df(ohlc_htf)
+
+    try:
+        if need_htf:
+            sigs = detect_psar_signals(df_ltf, mode=mode_e, htf_df=df_htf)
+        else:
+            sigs = detect_psar_signals(df_ltf, mode=mode_e, htf_df=None)
     except Exception as e:
         print(f"  [S43] detect error {market} {mode}: {e}", flush=True)
         return []
 
-    n = len(df)
-    lookback = LOOKBACK.get(tf, 1)
+    n = len(df_ltf)
+    lookback = LOOKBACK.get(ltf, 1)
     d = 2 if market == "XAUUSD" else (3 if "JPY" in market else 5)
     rr = RR_REF.get(mode, 2.5)
     out = []
 
     for s in sigs:
-        # entry_bar can be last index; skip if would need future bar
         if s.entry_bar >= n:
             continue
         bars_ago = n - 1 - s.entry_bar
@@ -89,27 +100,29 @@ def scan_s43(ohlc: dict, market: str, mode: str) -> List[dict]:
         risk = abs(entry - stop)
         if risk < 1e-12:
             continue
-        if side == "LONG":
-            target = entry + rr * risk
-        else:
-            target = entry - rr * risk
+        target = entry + rr * risk if side == "LONG" else entry - rr * risk
+
+        tf_label = ltf
+        if need_htf and cfg.get("htf"):
+            tf_label = f"{ltf}←{cfg['htf']}"
 
         out.append({
             "strategy": "S43",
             "phase": "ENTRY",
             "mode": mode,
             "market": market,
-            "tf": tf,
+            "tf": tf_label,
             "direction": side,
             "entry": round(entry, d),
             "stop": round(stop, d),
             "target": round(target, d),
             "psar": round(float(s.psar_at_entry), d),
-            "atr_pct": round(float(s.atr_pct), 2),
+            "atr_pct": round(float(getattr(s, "atr_pct", 0) or 0), 2),
             "rr": rr,
             "bars_ago": bars_ago,
             "priority": 2000 + MODE_PRI.get(mode, 100),
-            "role": MODE_CONFIG[Mode(mode)]["description"],
+            "role": cfg.get("description", mode),
+            "grade": "A" if "ALIGN" in mode else "A-",
             "trail": True,
             "key": f"S43|{mode}|{market}|{side}|{round(entry, d)}",
         })
