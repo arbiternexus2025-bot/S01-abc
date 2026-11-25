@@ -1,7 +1,7 @@
 """
 ================================================================================
-  EDGE LAB LIVE  ·  MARIO STRIKE + S43 HTF→M1 LIMIT TRAIL
-  S43 XAUUSD: M5_LIM070 · M30_LIM050 · H1_LIM040
+  EDGE LAB LIVE  ·  S43 HTF→M1 LIMIT TRAIL (Mario on hold)
+  XAUUSD: M5_LIM070 · M30_LIM050 · H1_LIM040
 ================================================================================
 """
 from flask import Flask
@@ -9,7 +9,7 @@ import time
 import threading
 from datetime import datetime, timezone
 from telegram_bot import send_alert
-from strategy_runner import check_all, select_best, ALL_MARKETS, MARIO_TFS
+from strategy_runner import check_all, select_best
 from S43_HTF_M1_Limit_detection import S43Detector
 
 app = Flask(__name__)
@@ -18,43 +18,15 @@ app = Flask(__name__)
 @app.route("/")
 @app.route("/health")
 def health():
-    return "EDGE LAB · MARIO + S43 HTF→M1 OK", 200
+    return "EDGE LAB · S43 HTF→M1 OK", 200
 
 
 SCAN_EVERY = 40
-ENTRY_COOLDOWN = 2 * 3600  # limit fills can re-arm; 2h cooldown
+ENTRY_COOLDOWN = 2 * 3600
 
 
 def _fmt(x):
     return f"<code>{x}</code>"
-
-
-def format_mario(s):
-    is_long = s["direction"] == "LONG"
-    arrow = "▲ LONG" if is_long else "▼ SHORT"
-    colour = "🟢" if is_long else "🔴"
-    side = "BUY" if is_long else "SELL"
-    zone = "DEMAND" if is_long else "SUPPLY"
-    return f"""
-🎯 <b>MARIO STRIKE</b>  ·  <b>ENTRY</b>
-
-━━━━━━━━━━━━━━━━━━━━
-<b>{s['market']}</b>   ·   <b>{s['tf']}</b>
-{colour}  <b>{arrow}</b>
-━━━━━━━━━━━━━━━━━━━━
-
-Liquidity swept, structure broken, rejection at the zone.
-
-✅ <b>TRADE PLAN</b>
-• Entry: {_fmt(s['entry'])}
-• Stop: {_fmt(s['stop'])}
-• Target: {_fmt(s['target'])}
-• R:R = 1 : {s['rr']:.1f}
-
-📍 {zone}: {_fmt(s.get('poi_bot', '—'))} → {_fmt(s.get('poi_top', '—'))}
-
-🔥 Prefer a {side} near the entry. Do not chase.
-""".strip()
 
 
 def format_s43(s):
@@ -80,23 +52,18 @@ HTF PSAR flip → M1 limit fill at {_fmt(s['limit_price'])}
 • Reference target (RR {s['rr']:.1f}): {_fmt(s['target'])}
 • HTF signal price: {_fmt(s['htf_sig_price'])}
 
-🔥 {side} was filled at the limit.
+🔥 {side} filled at the limit.
 Trail the stop with <b>M1 Parabolic SAR</b> (previous bar).
 Do not use a static stop only.
 """.strip()
 
 
-def format_alert(s):
-    return format_s43(s) if s.get("strategy") == "S43" else format_mario(s)
-
-
 def run_loop():
     labels = [S43Detector.MODES[k]["label"] for k in ("A", "B", "C")]
     print("=" * 64, flush=True)
-    print("  ██  EDGE LAB LIVE  ·  MARIO + S43 HTF→M1  ██", flush=True)
+    print("  ██  EDGE LAB LIVE  ·  S43 HTF→M1 ONLY  ██", flush=True)
     print("=" * 64, flush=True)
-    print(f"  Markets : {', '.join(ALL_MARKETS)}", flush=True)
-    print(f"  MARIO   : {', '.join(MARIO_TFS)}  ({len(ALL_MARKETS)*len(MARIO_TFS)} combos)", flush=True)
+    print("  Mario   : ON HOLD", flush=True)
     print(f"  S43     : XAUUSD · {' · '.join(labels)}", flush=True)
     print(f"  Poll    : every {SCAN_EVERY}s", flush=True)
     print("=" * 64, flush=True)
@@ -124,18 +91,17 @@ def run_loop():
                 for s in signals:
                     key = s["key"]
                     if now - last_alert.get(key, 0) > ENTRY_COOLDOWN:
-                        if send_alert(format_alert(s)):
+                        if send_alert(format_s43(s)):
                             last_alert[key] = now
                             print(
-                                f"  ★ TELEGRAM  {s['strategy']}  "
-                                f"{s['market']} {s.get('mode', s.get('tf'))} {s['direction']}",
+                                f"  ★ TELEGRAM  S43  {s['mode']} {s['direction']} "
+                                f"@ {s['entry']}",
                                 flush=True,
                             )
                     else:
                         remain = int(ENTRY_COOLDOWN - (now - last_alert.get(key, 0)))
                         print(
-                            f"  · cooldown  {s['strategy']} {s['market']} "
-                            f"{s['direction']}  {remain//60}m",
+                            f"  · cooldown  {s['mode']} {s['direction']}  {remain//60}m",
                             flush=True,
                         )
                 print(f"  Next poll in ~{SCAN_EVERY}s", flush=True)
