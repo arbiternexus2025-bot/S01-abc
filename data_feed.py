@@ -1,4 +1,4 @@
-"""MARIO STRIKE + S43 data feed — biquote.io + short cache."""
+"""EDGE LAB data feed — biquote.io + short cache (incl. M1 for S43)."""
 from __future__ import annotations
 import time
 import requests
@@ -12,6 +12,7 @@ SYMBOL_MAP = {
 }
 
 INTERVAL_MAP = {
+    "M1": "1m",
     "M5": "5m",
     "M30": "30m",
     "H1": "1h",
@@ -19,7 +20,7 @@ INTERVAL_MAP = {
 }
 
 _CACHE: dict = {}
-_CACHE_TTL = 40.0
+_CACHE_TTL = 35.0
 
 
 def _parse_time(s):
@@ -42,24 +43,28 @@ def get_ohlc(market: str, tf: str, limit: int = 400, use_cache: bool = True):
     if not interval:
         print(f"[DATA] {market} {tf}: unsupported TF", flush=True)
         return None
-    # M5 needs more bars for ATR percentile window
-    if tf == "M5":
-        limit = max(limit, 600)
+
+    # M1 needs longer history for trail + windows
+    if tf == "M1":
+        limit = max(limit, 1500)
+    elif tf == "M5":
+        limit = max(limit, 500)
+
     try:
         r = requests.get(
             f"https://biquote.io/api/{symbol}/ohlc",
             params={"interval": interval, "limit": limit},
-            timeout=10,
+            timeout=12,
         )
         data = r.json()
         if "bars" not in data:
-            print(f"[DATA] {market} {tf}: {str(data)[:120]}", flush=True)
+            print(f"[DATA] {market} {tf}: {str(data)[:140]}", flush=True)
             return None
         bars = [b for b in data["bars"] if not b.get("isOpen", False)]
         bars = list(reversed(bars))
-        need = 120 if tf != "M5" else 200
+        need = {"M1": 300, "M5": 150, "M30": 100, "H1": 100, "H4": 80}.get(tf, 100)
         if len(bars) < need:
-            print(f"[DATA] {market} {tf}: only {len(bars)} bars", flush=True)
+            print(f"[DATA] {market} {tf}: only {len(bars)} bars (need {need})", flush=True)
             return None
         ohlc = {
             "open": np.array([float(b["open"]) for b in bars]),

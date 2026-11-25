@@ -1,129 +1,96 @@
 """
-S43 — Parabolic SAR Trail live scanner (XAUUSD only)
+S43 — HTF → M1 Limit Trail (XAUUSD locked champions)
 ====================================================
-Champions:
-  M5_H4_ALIGN  M5 entry + H4 PSAR align + VOL40  · Grade A
-  H1_H4_ALIGN  H1 entry + H4 PSAR align + VOL40  · Grade A
-  H4_PURE      H4 Pure (no EMA)
+  A  M5_LIM070   M5 → M1 | NOVOL + no EMA | limit 0.70 ATR | Grade B+
+  B  M30_LIM050  M30 → M1 | VOL≥0.40 + EMA9 | limit 0.50 ATR | Grade A
+  C  H1_LIM040   H1 → M1 | VOL≥0.40 + EMA9 | limit 0.40 ATR | Grade A
 """
 from __future__ import annotations
 import numpy as np
-import pandas as pd
-from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Dict, Optional
+from S43_HTF_M1_Limit_detection import S43Detector, S43Signal
 
-from S43_PSAR_Trail_detection import detect_psar_signals, Mode, MODE_CONFIG
+# Live freshness: only alert fills on recent M1 bars
+M1_LOOKBACK = 8  # minutes of closed M1
 
-
-def _naive_utc(t) -> pd.Timestamp:
-    try:
-        if isinstance(t, (int, float)) and float(t) > 1e9:
-            ts = pd.Timestamp(datetime.fromtimestamp(float(t), tz=timezone.utc))
-        else:
-            ts = pd.Timestamp(t)
-        if ts.tzinfo is not None:
-            ts = ts.tz_convert("UTC").tz_localize(None)
-        return ts
-    except Exception:
-        return pd.Timestamp(datetime.utcnow())
+MODE_ORDER = ["A", "B", "C"]  # scan order
 
 
-def arrays_to_df(ohlc: dict) -> pd.DataFrame:
-    n = len(ohlc["close"])
-    times = ohlc.get("time")
-    if times is None:
-        now = datetime.now(timezone.utc).timestamp()
-        times = np.array([now - (n - 1 - i) * 300 for i in range(n)])
-    return pd.DataFrame({
-        "Time": [_naive_utc(x) for x in times],
-        "Open": np.asarray(ohlc.get("open", ohlc["close"]), dtype=float),
+def _to_arrays(ohlc: dict) -> Dict[str, np.ndarray]:
+    return {
+        "Open": np.asarray(ohlc["open"], dtype=float),
         "High": np.asarray(ohlc["high"], dtype=float),
         "Low": np.asarray(ohlc["low"], dtype=float),
         "Close": np.asarray(ohlc["close"], dtype=float),
-    })
+    }
 
 
-LOOKBACK = {"M5": 3, "H1": 1, "H4": 1}
-RR_REF = {"M5_H4_ALIGN": 2.0, "H1_H4_ALIGN": 2.5, "H4_PURE": 3.0}
-MODE_PRI = {"M5_H4_ALIGN": 500, "H1_H4_ALIGN": 450, "H4_PURE": 400}
+def _times(ohlc: dict) -> np.ndarray:
+    # detector accepts any comparable array; use float unix
+    return np.asarray(ohlc["time"], dtype=float)
 
 
-def scan_s43(
-    ohlc_ltf: dict,
-    market: str,
+def scan_s43_mode(
+    ohlc_htf: dict,
+    ohlc_m1: dict,
     mode: str,
-    ohlc_htf: Optional[dict] = None,
 ) -> List[dict]:
-    if ohlc_ltf is None or len(ohlc_ltf["close"]) < 150:
+    """Run one locked mode (A/B/C). Returns packed alert dicts."""
+    if ohlc_htf is None or ohlc_m1 is None:
         return []
-    try:
-        mode_e = Mode(mode)
-    except Exception:
+    if len(ohlc_m1["close"]) < 200 or len(ohlc_htf["close"]) < 80:
         return []
 
-    cfg = MODE_CONFIG[mode_e]
-    ltf = cfg.get("ltf") or cfg.get("tf") or "H4"
-    need_htf = bool(cfg.get("htf_align"))
-
-    df_ltf = arrays_to_df(ohlc_ltf)
-    df_htf = None
-    if need_htf:
-        if ohlc_htf is None or len(ohlc_htf["close"]) < 80:
-            return []
-        df_htf = arrays_to_df(ohlc_htf)
-
+    det = S43Detector(mode=mode.upper())
     try:
-        if need_htf:
-            sigs = detect_psar_signals(df_ltf, mode=mode_e, htf_df=df_htf)
-        else:
-            sigs = detect_psar_signals(df_ltf, mode=mode_e, htf_df=None)
+        sigs: List[S43Signal] = det.detect(
+            htf_data=_to_arrays(ohlc_htf),
+            m1_data=_to_arrays(ohlc_m1),
+            htf_times=_times(ohlc_htf),
+            m1_times=_times(ohlc_m1),
+            mode=mode.upper(),
+        )
     except Exception as e:
-        print(f"  [S43] detect error {market} {mode}: {e}", flush=True)
+        print(f"  [S43] detect error mode={mode}: {e}", flush=True)
         return []
 
-    n = len(df_ltf)
-    lookback = LOOKBACK.get(ltf, 1)
-    d = 2 if market == "XAUUSD" else (3 if "JPY" in market else 5)
-    rr = RR_REF.get(mode, 2.5)
+    n = len(ohlc_m1["close"])
+    cfg = S43Detector.MODES[mode.upper()]
     out = []
-
     for s in sigs:
-        if s.entry_bar >= n:
-            continue
         bars_ago = n - 1 - s.entry_bar
-        if bars_ago > lookback or bars_ago < 0:
+        if bars_ago < 0 or bars_ago > M1_LOOKBACK:
             continue
-
         side = "LONG" if s.direction == 1 else "SHORT"
         entry = float(s.entry_price)
-        stop = float(s.stop_initial) if s.stop_initial is not None else float(s.psar_at_entry)
+        stop = float(s.stop)
+        # Reference target from initial risk (trail is primary exit)
         risk = abs(entry - stop)
+        rr = 2.5 if mode.upper() != "A" else 2.0
         if risk < 1e-12:
             continue
         target = entry + rr * risk if side == "LONG" else entry - rr * risk
 
-        tf_label = ltf
-        if need_htf and cfg.get("htf"):
-            tf_label = f"{ltf}←{cfg['htf']}"
-
         out.append({
             "strategy": "S43",
             "phase": "ENTRY",
-            "mode": mode,
-            "market": market,
-            "tf": tf_label,
+            "mode": s.htf_mode or cfg["label"],
+            "mode_code": mode.upper(),
+            "market": "XAUUSD",
+            "tf": f"{cfg['htf']}→M1",
             "direction": side,
-            "entry": round(entry, d),
-            "stop": round(stop, d),
-            "target": round(target, d),
-            "psar": round(float(s.psar_at_entry), d),
-            "atr_pct": round(float(getattr(s, "atr_pct", 0) or 0), 2),
+            "entry": round(entry, 2),
+            "stop": round(stop, 2),
+            "target": round(target, 2),
+            "limit_price": round(float(s.limit_price), 2),
+            "limit_off": float(s.limit_off),
+            "htf_sig_price": round(float(s.htf_sig_price), 2),
+            "grade": s.grade or cfg["grade"],
             "rr": rr,
             "bars_ago": bars_ago,
-            "priority": 2000 + MODE_PRI.get(mode, 100),
-            "role": cfg.get("description", mode),
-            "grade": "A" if "ALIGN" in mode else "A-",
             "trail": True,
-            "key": f"S43|{mode}|{market}|{side}|{round(entry, d)}",
+            "priority": {"C": 500, "B": 450, "A": 400}.get(mode.upper(), 300),
+            "role": f"S43 {cfg['label']} HTF→M1 Limit Trail",
+            "key": f"S43|{cfg['label']}|XAUUSD|{side}|{round(entry, 2)}",
         })
     return out

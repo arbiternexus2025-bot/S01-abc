@@ -1,22 +1,20 @@
 """
-EDGE LAB LIVE — MARIO + S43 (XAU)
-=================================
-MARIO  : majors + XAU · M30/H1/H4 structure
-S43    : XAUUSD only
-         M5_H4_ALIGN · H1_H4_ALIGN · H4_PURE
+EDGE LAB LIVE — MARIO + S43 HTF→M1 Limit Trail
+==============================================
+MARIO  : majors + XAU · M30/H1/H4 structure ENTRY
+S43    : XAUUSD only · M5/M30/H1 → M1 limit trail champions
 """
 from __future__ import annotations
 from data_feed import get_ohlc, clear_cache
 from mario_engine import scan_mario
-from s43_engine import scan_s43
-from S43_PSAR_Trail_detection import MODE_CONFIG, Mode
+from s43_engine import scan_s43_mode, MODE_ORDER
+from S43_HTF_M1_Limit_detection import S43Detector
 
 MAJORS = ["EURUSD", "GBPUSD", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD"]
 ALL_MARKETS = MAJORS + ["XAUUSD"]
 MARIO_TFS = ["M30", "H1", "H4"]
 
-# Gold-only S43 champions
-S43_MODES = ["M5_H4_ALIGN", "H1_H4_ALIGN", "H4_PURE"]
+S43_MODE_META = S43Detector.MODES  # A/B/C
 
 
 def check_all():
@@ -47,7 +45,7 @@ def check_all():
                 for s in sigs:
                     print(
                         f"  {tag}  🎯 MARIO {s['direction']:5s}  "
-                        f"{s['entry']} SL {s['stop']} TP {s['target']} RR={s['rr']}",
+                        f"{s['entry']} SL {s['stop']} TP {s['target']}",
                         flush=True,
                     )
                     results.append(s)
@@ -56,53 +54,48 @@ def check_all():
                 print(f"  {tag}  ·  ERROR  {e}", flush=True)
                 stats["error"] += 1
 
-    # ── S43 XAU only ──
-    print("  ── S43 PSAR TRAIL (XAUUSD) ──", flush=True)
-    # Prefetch H4 once for align modes
-    xau_h4 = get_ohlc("XAUUSD", "H4", limit=280)
-    xau_h1 = get_ohlc("XAUUSD", "H1", limit=320)
-    xau_m5 = get_ohlc("XAUUSD", "M5", limit=600)
-
-    for mode in S43_MODES:
-        stats["scanned"] += 1
-        cfg = MODE_CONFIG[Mode(mode)]
-        ltf = cfg.get("ltf") or "H4"
-        tag = f"[S] XAUUSD  {mode}"
-        try:
-            if ltf == "M5":
-                ohlc_ltf = xau_m5
-            elif ltf == "H1":
-                ohlc_ltf = xau_h1
-            else:
-                ohlc_ltf = xau_h4
-
-            if ohlc_ltf is None:
-                print(f"  {tag}  ·  NO DATA (LTF {ltf})", flush=True)
-                stats["no_data"] += 1
-                continue
-
-            ohlc_htf = xau_h4 if cfg.get("htf_align") else None
-            if cfg.get("htf_align") and ohlc_htf is None:
-                print(f"  {tag}  ·  NO DATA (H4 align feed)", flush=True)
-                stats["no_data"] += 1
-                continue
-
-            sigs = scan_s43(ohlc_ltf, "XAUUSD", mode, ohlc_htf=ohlc_htf)
-            if not sigs:
-                print(f"  {tag}  ·  NO ENTRY  (LTF={len(ohlc_ltf['close'])} bars)", flush=True)
-                stats["no_setup"] += 1
-                continue
-            for s in sigs:
-                print(
-                    f"  {tag}  🎯 S43 {s['direction']:5s}  "
-                    f"{s['entry']}  PSAR {s['stop']}  {s['tf']}",
-                    flush=True,
-                )
-                results.append(s)
-                stats["S43"] += 1
-        except Exception as e:
-            print(f"  {tag}  ·  ERROR  {e}", flush=True)
-            stats["error"] += 1
+    # ── S43 XAU HTF→M1 ──
+    print("  ── S43 HTF→M1 LIMIT TRAIL (XAUUSD) ──", flush=True)
+    m1 = get_ohlc("XAUUSD", "M1", limit=1500)
+    if m1 is None:
+        print("  [S] XAUUSD M1  ·  NO DATA — S43 skipped this cycle", flush=True)
+        stats["no_data"] += 3
+    else:
+        htf_cache = {}
+        for code in MODE_ORDER:
+            stats["scanned"] += 1
+            meta = S43_MODE_META[code]
+            htf_tf = meta["htf"]
+            tag = f"[S] XAUUSD  {meta['label']} ({htf_tf}→M1)"
+            try:
+                if htf_tf not in htf_cache:
+                    htf_cache[htf_tf] = get_ohlc("XAUUSD", htf_tf)
+                htf = htf_cache[htf_tf]
+                if htf is None:
+                    print(f"  {tag}  ·  NO DATA (HTF {htf_tf})", flush=True)
+                    stats["no_data"] += 1
+                    continue
+                sigs = scan_s43_mode(htf, m1, code)
+                if not sigs:
+                    print(
+                        f"  {tag}  ·  NO ENTRY  "
+                        f"(HTF={len(htf['close'])} M1={len(m1['close'])})",
+                        flush=True,
+                    )
+                    stats["no_setup"] += 1
+                    continue
+                for s in sigs:
+                    print(
+                        f"  {tag}  🎯 S43 {s['direction']:5s}  "
+                        f"limit {s['limit_price']} fill {s['entry']}  "
+                        f"SL {s['stop']}  grade={s['grade']}",
+                        flush=True,
+                    )
+                    results.append(s)
+                    stats["S43"] += 1
+            except Exception as e:
+                print(f"  {tag}  ·  ERROR  {e}", flush=True)
+                stats["error"] += 1
 
     print("-" * 64, flush=True)
     print(
@@ -116,12 +109,11 @@ def check_all():
 
 
 def select_best(signals):
+    """One alert per strategy + market + direction (prefer higher priority)."""
     if not signals:
         return []
     groups = {}
     for s in signals:
-        key = f"{s['strategy']}|{s['market']}|{s['direction']}|{s.get('mode', s.get('tf',''))}"
-        # tighter: one per strategy+market+direction (mode absorbed)
         key = f"{s['strategy']}|{s['market']}|{s['direction']}"
         cur = groups.get(key)
         if cur is None or s["priority"] > cur["priority"] or (

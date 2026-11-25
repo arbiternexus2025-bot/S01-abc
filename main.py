@@ -1,7 +1,7 @@
 """
 ================================================================================
-  EDGE LAB LIVE  ·  MARIO STRIKE + S43 PSAR TRAIL
-  S43: M5_H4_ALIGN · H1_H4_ALIGN · H4_PURE  (XAUUSD only)
+  EDGE LAB LIVE  ·  MARIO STRIKE + S43 HTF→M1 LIMIT TRAIL
+  S43 XAUUSD: M5_LIM070 · M30_LIM050 · H1_LIM040
 ================================================================================
 """
 from flask import Flask
@@ -9,7 +9,8 @@ import time
 import threading
 from datetime import datetime, timezone
 from telegram_bot import send_alert
-from strategy_runner import check_all, select_best, ALL_MARKETS, MARIO_TFS, S43_MODES
+from strategy_runner import check_all, select_best, ALL_MARKETS, MARIO_TFS
+from S43_HTF_M1_Limit_detection import S43Detector
 
 app = Flask(__name__)
 
@@ -17,11 +18,11 @@ app = Flask(__name__)
 @app.route("/")
 @app.route("/health")
 def health():
-    return "EDGE LAB · MARIO + S43 OK", 200
+    return "EDGE LAB · MARIO + S43 HTF→M1 OK", 200
 
 
 SCAN_EVERY = 40
-ENTRY_COOLDOWN = 3 * 3600
+ENTRY_COOLDOWN = 2 * 3600  # limit fills can re-arm; 2h cooldown
 
 
 def _fmt(x):
@@ -61,34 +62,27 @@ def format_s43(s):
     arrow = "▲ LONG" if is_long else "▼ SHORT"
     colour = "🟢" if is_long else "🔴"
     side = "BUY" if is_long else "SELL"
-    titles = {
-        "M5_H4_ALIGN": "M5 ← H4 ALIGN · VOL40 · Grade A",
-        "H1_H4_ALIGN": "H1 ← H4 ALIGN · VOL40 · Grade A",
-        "H4_PURE": "H4 PURE · No EMA",
-    }
-    title = titles.get(s["mode"], s["mode"])
-    align_note = ""
-    if "ALIGN" in s["mode"]:
-        align_note = "\nH4 PSAR trend agrees with the entry direction."
-
     return f"""
-🚀 <b>S43 PSAR TRAIL</b>  ·  <b>ENTRY</b>
+🚀 <b>S43 LIMIT TRAIL</b>  ·  <b>ENTRY</b>
 
 ━━━━━━━━━━━━━━━━━━━━
-<b>{s['market']}</b>   ·   <b>{s['tf']}</b>
+<b>XAUUSD</b>   ·   <b>{s['tf']}</b>
 {colour}  <b>{arrow}</b>
 ━━━━━━━━━━━━━━━━━━━━
 
-Mode: <b>{title}</b>{align_note}
-Trail the stop with Parabolic SAR.
+Mode: <b>{s['mode']}</b>  ·  Grade <b>{s['grade']}</b>
+HTF PSAR flip → M1 limit fill at {_fmt(s['limit_price'])}
+(offset {s['limit_off']:.2f} × HTF ATR)
 
 ✅ <b>TRADE PLAN</b>
-• Entry: {_fmt(s['entry'])}
-• Initial stop (PSAR): {_fmt(s['stop'])}
+• Fill / Entry: {_fmt(s['entry'])}
+• Initial trail stop (M1 PSAR): {_fmt(s['stop'])}
 • Reference target (RR {s['rr']:.1f}): {_fmt(s['target'])}
-• ATR regime: {s.get('atr_pct', 0):.0%}
+• HTF signal price: {_fmt(s['htf_sig_price'])}
 
-🔥 {side} near {_fmt(s['entry'])}. Manage with the SAR trail.
+🔥 {side} was filled at the limit.
+Trail the stop with <b>M1 Parabolic SAR</b> (previous bar).
+Do not use a static stop only.
 """.strip()
 
 
@@ -97,12 +91,13 @@ def format_alert(s):
 
 
 def run_loop():
+    labels = [S43Detector.MODES[k]["label"] for k in ("A", "B", "C")]
     print("=" * 64, flush=True)
-    print("  ██  EDGE LAB LIVE  ·  MARIO + S43  ██", flush=True)
+    print("  ██  EDGE LAB LIVE  ·  MARIO + S43 HTF→M1  ██", flush=True)
     print("=" * 64, flush=True)
     print(f"  Markets : {', '.join(ALL_MARKETS)}", flush=True)
     print(f"  MARIO   : {', '.join(MARIO_TFS)}  ({len(ALL_MARKETS)*len(MARIO_TFS)} combos)", flush=True)
-    print(f"  S43     : XAUUSD · {', '.join(S43_MODES)}", flush=True)
+    print(f"  S43     : XAUUSD · {' · '.join(labels)}", flush=True)
     print(f"  Poll    : every {SCAN_EVERY}s", flush=True)
     print("=" * 64, flush=True)
 
